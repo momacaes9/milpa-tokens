@@ -48,6 +48,15 @@ class Config:
     def prices(self) -> dict[str, float]:
         return {item: self.price(item) for item in REDEEMABLE}
 
+    @property
+    def fx(self) -> float:
+        """Belize dollars per US dollar (fixed at 2 by the case)."""
+        return float(self.case["fx_bzd_per_usd"])
+
+    def wage_usd_per_hour(self) -> float:
+        """Cash value of one token's hour: the Belize minimum wage, in USD."""
+        return float(self.token["wage_bzd_per_hour"]) / self.fx
+
     def year(self, year: str) -> Mapping[str, Any]:
         if year not in YEAR_TYPES:
             raise ConfigError(f"year must be one of {YEAR_TYPES}, not {year!r}")

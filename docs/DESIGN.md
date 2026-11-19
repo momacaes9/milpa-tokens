@@ -22,6 +22,16 @@ Old debts can be **paid in hands**. An hour of work cancels part of an unpaid
 balance in the credit notebook. Debt labor issues no tokens; it only reduces what
 is owed.
 
+## Pegging the hour to real Belize data
+
+The hour a token pays for is valued at the **Belize national minimum wage,
+BZ$5.00 per hour (US$2.50)**, in force since 1 January 2023 (source in
+[`data/belize_reference_data.csv`](../data/belize_reference_data.csv)). That wage
+is used to turn unpaid debt into hours of work ("pay in hands"): $2.50 of old debt
+cancelled per hour. The food a token buys (10 lb of corn, $3.00 at Ernestine's
+price) is deliberately worth **more** than the cash wage. That gap is what makes a
+neighbor prefer a token to cash.
+
 ## What a token is not
 
 * **Not money.** Only Ernestine issues tokens and only Ernestine redeems them.

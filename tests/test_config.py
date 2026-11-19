@@ -43,6 +43,20 @@ class TestCaseNumbers(unittest.TestCase):
         self.assertEqual(CFG.case["family_size"], 6)
 
 
+class TestWagePeg(unittest.TestCase):
+    def test_minimum_wage_peg(self):
+        self.assertEqual(CFG.token["wage_bzd_per_hour"], 5.0)
+        self.assertAlmostEqual(CFG.wage_usd_per_hour(), 2.50)
+
+    def test_reference_csv_has_wage(self):
+        import csv
+        from milpa.config import DEFAULT_CONFIG
+        path = DEFAULT_CONFIG.parents[1] / "data" / "belize_reference_data.csv"
+        with path.open(encoding="utf-8") as fh:
+            rows = {r["indicator"]: r for r in csv.DictReader(fh)}
+        self.assertEqual(float(rows["national_minimum_wage"]["value"]), CFG.token["wage_bzd_per_hour"])
+
+
 class TestCalendar(unittest.TestCase):
     def test_months_in_order(self):
         months = CFG.months_in_order()
