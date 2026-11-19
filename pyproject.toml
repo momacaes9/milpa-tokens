@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "milpa-tokens"
+version = "1.0.0"
+description = "Closed-loop, food-backed harvest credit for Tierra Viva Farm (UNC IC case, Fall 2026): rules, ledger and simulations."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+charts = ["matplotlib>=3.7"]
+dev = ["matplotlib>=3.7", "coverage>=7"]
+
+[project.scripts]
+milpa = "milpa.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
