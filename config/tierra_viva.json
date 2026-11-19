@@ -233,5 +233,50 @@
         "harvest"
       ]
     }
-  }
+  },
+  "simulation": {
+    "drums_total": 2,
+    "family_drums": 1,
+    "sale_drum_mix_by_weight": {"corn": 0.5, "beans": 0.5},
+    "sale_drum_fill_share": {"normal": 1.0, "bad": 0.5},
+    "help_hours_wanted_per_work_month": 16,
+    "participating_households": 15,
+    "labor_settlement_share": 0.30,
+    "redemption_rate": 0.90,
+    "fresh_redemption_share_at_harvest": 0.5,
+    "helper_productivity": 1.0,
+    "fresh_share_of_harvest_sales": 0.35,
+    "turned_away_per_week_used": 9,
+    "monte_carlo": {
+      "runs": 2000,
+      "seed": 2026,
+      "unpaid_share_concentration": 20,
+      "labor_settlement_share_range": [0.15, 0.45],
+      "redemption_rate_range": [0.75, 1.0],
+      "bad_year_fill_share_range": [0.3, 0.7]
+    }
+  },
+  "sensitivity": {
+    "wage_bzd_per_hour": [5.0, 6.0],
+    "in_kind_corn_lb": [10, 9],
+    "drums_total": [2, 3]
+  },
+  "assumptions": [
+    {"key": "calendar.normal / calendar.bad", "value": "see calendar", "status": "assumption", "why": "Case gives month-type counts only. Planting months sourced (IICA/SHI-B 2013); harvest months inferred; storm months placed in the June-October wet season (Exhibit F)."},
+    {"key": "case.years.bad monthly credit", "value": "normal-year shares scaled to $491", "status": "derived", "why": "Case gives the bad-year credit total only."},
+    {"key": "token.in_kind_corn_lb", "value": 10, "status": "design choice", "why": "Makes one token worth $3.00 at Ernestine's corn price, 20% above the BZ$5 (US$2.50) hourly minimum wage."},
+    {"key": "token.max_tokens_per_household", "value": 10, "status": "design choice", "why": "Caps what Ernestine owes any one household at 10 hours of work ($30 of food at the 10 lb rate), so one family cannot drain a sale drum."},
+    {"key": "token.expiry_months", "value": 12, "status": "design choice", "why": "One full crop cycle; time-bank evidence shows unspent credits pile up without a limit."},
+    {"key": "simulation.drums_total / family_drums", "value": "2 / 1", "status": "design choice", "why": "Case: drums cost $100 and hold ~250 lb; she has $350. Drum 1 is the family's food and never counted as reserve."},
+    {"key": "simulation.sale_drum_mix_by_weight", "value": "50% corn, 50% beans", "status": "assumption", "why": "Turned-away buyers ask for corn and beans (Exhibit D); no split is given."},
+    {"key": "simulation.sale_drum_fill_share", "value": "normal 100%, bad 50%", "status": "assumption", "why": "Case gives no harvest tonnage. Family drum is filled first; a bad harvest leaves less for the sale drum."},
+    {"key": "simulation.help_hours_wanted_per_work_month", "value": 16, "status": "assumption", "why": "About 4 hours a week of help in planting and harvest months, against 26 h/week of field work that peaks then (Exhibit C)."},
+    {"key": "simulation.participating_households", "value": 15, "status": "case-derived", "why": "Exhibit D: about 15 households owe her money at any time."},
+    {"key": "simulation.labor_settlement_share", "value": 0.30, "status": "assumption", "why": "Share of never-repaid credit that would be repaid in hours instead. Team estimate; Monte Carlo tests 15-45%."},
+    {"key": "simulation.redemption_rate", "value": 0.90, "status": "assumption", "why": "Share of tokens redeemed before expiry. Monte Carlo tests 75-100%."},
+    {"key": "simulation.fresh_redemption_share_at_harvest", "value": 0.5, "status": "assumption", "why": "Share of harvest-month tokens taken immediately in fresh produce that would otherwise spoil."},
+    {"key": "simulation.fresh_share_of_harvest_sales", "value": 0.35, "status": "assumption", "why": "Exhibit B: plantains 20% + peppers/tomatoes/herbs 15% of sales; assumed to hold in harvest months."},
+    {"key": "simulation.turned_away_per_week_used", "value": 9, "status": "case-derived", "why": "Midpoint of 8-10 buyers a week (Exhibit D)."},
+    {"key": "simulation.helper_productivity", "value": 1.0, "status": "assumption", "why": "One neighbor hour replaces one of Ernestine's field hours."}
+  ]
 }

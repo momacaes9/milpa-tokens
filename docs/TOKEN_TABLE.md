@@ -12,4 +12,8 @@ Ernestine's own prices (case Exhibit B). The anchor is **10 lb of corn**
 | Plantains (surplus on hand that month) | 12 | $3.00 | Nov, Dec, Jan (harvest) |
 | Peppers, tomatoes, herbs (surplus on hand) | 2.0 lb | $3.00 | Nov, Dec, Jan (harvest) |
 
+Grain tokens may also be paid as a corn-and-beans mix worth $3.00.
+Seed and fresh produce are allowed by the rules; the simulator models grain and
+fresh-produce redemptions only (the case gives no seed stock figure).
+
 Regenerate with `milpa token-table` (add `--year bad` for the bad-weather calendar).

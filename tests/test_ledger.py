@@ -189,6 +189,37 @@ class TestRedeem(unittest.TestCase):
         with self.assertRaises(LedgerError):
             ledger.set_fresh_on_hand(NOV, "plantain", -1)
 
+    def test_grain_mix_pays_when_no_single_grain_is_enough(self):
+        ledger = make_ledger(corn_lb=6)        # $1.80 of corn
+        ledger.add_to_reserve(0, "beans", 1.5)  # $1.50 of beans -> $3.30 backs one token
+        ledger.issue(MAY, "A", 1)
+        with self.assertRaises(InsufficientReserve):
+            ledger.redeem(JUL, "A", 1, "corn")
+        with self.assertRaises(InsufficientReserve):
+            ledger.redeem(JUL, "A", 1, "beans")
+        handed = ledger.redeem_grain_mix(JUL, "A", 1)
+        value = sum(lb * CFG.price(i) for i, lb in handed.items())
+        self.assertAlmostEqual(value, 3.00)
+        self.assertEqual(ledger.outstanding, 0)
+
+    def test_grain_mix_rules(self):
+        ledger = make_ledger(corn_lb=20)
+        ledger.issue(MAY, "A", 1)
+        with self.assertRaises(OutsideWindow):
+            ledger.redeem_grain_mix(JUN, "A", 1)
+        with self.assertRaises(InsufficientTokens):
+            ledger.redeem_grain_mix(JUL, "A", 2)
+        with self.assertRaises(LedgerError):
+            ledger.redeem_grain_mix(JUL, "A", 0)
+        with self.assertRaises(LedgerError):
+            ledger.redeem_grain_mix(JUL, "A", 1, items=("plantain",))
+        ledger2 = make_ledger(corn_lb=20)
+        ledger2.issue(MAY, "A", 1)
+        ledger2.sell_from_reserve(JUL, "corn", 10)  # leaves exactly $3.00
+        ledger2.sale_reserve["corn"] = 5            # simulate spoilage: $1.50 left
+        with self.assertRaises(InsufficientReserve):
+            ledger2.redeem_grain_mix(JUL, "A", 1)
+
     def test_oldest_tokens_used_first(self):
         ledger = make_ledger()
         ledger.issue(MAY, "A", 2)

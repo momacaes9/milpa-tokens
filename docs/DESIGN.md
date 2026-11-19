@@ -56,6 +56,25 @@ neighbor prefer a token to cash.
 | 7 | Redemption only in windows: grain pre-harvest/storm months, seed before planting, fresh produce at harvest | Food goes out when the village is short, or when it would spoil anyway | Voice note: "this month tokens buy corn" |
 | 8 | No transfers, no cash-out, no interest | Keeps it a harvest credit, not a currency | Name on every slip |
 | 9 | Every change is one notebook line; a failed step writes nothing | No half-written promises | Write the line, read it back, initial it |
+| 10 | A grain token may be paid as a corn-and-beans mix of the same value | Backing is counted in value, so a nearly empty drum can hold enough value without 10 lb of any one grain | "Half corn, half beans this time" |
+
+## What the simulator found that changed the rules
+
+* **Rule 10 came from the simulation.** In the two-year stress test, a backed
+  token could not be paid because the drum held $3 of grain but neither 10 lb
+  of corn nor 3 lb of beans. Allowing a mix closes that gap.
+* **The peg and the in-kind rate move together.** At BZ$6 (announced, not enacted),
+  10 lb of corn is worth exactly one hour's wage and the lock-in disappears. Raise
+  the in-kind rate to 12 lb if the wage changes.
+* **A third drum removes the cash trade-off.** With two drums, grain paid out to
+  token holders is grain not sold to pre-harvest buyers (about $62 less cash in a
+  normal year). With three drums, cash equals the drums-only case.
+
+## Assumptions
+
+Every assumption is listed with its status (case-derived, design choice,
+assumption) under `assumptions` in [`config/tierra_viva.json`](../config/tierra_viva.json),
+and the sourced facts are in [`docs/RESEARCH.md`](RESEARCH.md).
 
 ## Why code exists at all
 

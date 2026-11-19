@@ -1,0 +1,6 @@
+item,unit,token_qty,wage_qty_at_tierra_viva,wage_qty_at_truck_low,wage_qty_at_truck_high,wage_qty_at_punta_gorda,punta_gorda_price_date,advantage_vs_cash_at_tierra_viva,advantage_vs_truck_worst_case,available_with_cash_pre_harvest,note
+corn,lb,10.0,8.333333,,,11.111111,2022-08-13,0.2,,False,truck does not sell it; 8-10 buyers a week turned away before harvest
+beans,lb,3.0,2.5,,,2.5,2022-08-13,0.2,,False,truck does not sell it; 8-10 buyers a week turned away before harvest
+seed_corn,lb,3.0,2.5,,,,,0.2,,True,little competition (Exhibit B); sold before planting
+plantain,each,12.0,10.0,11.111111,11.764706,15.151515,2022-08-13,0.2,0.02,True,"truck sells plantains, no credit, no tokens"
+fresh_veg,lb,2.0,1.666667,1.851852,1.960784,1.428571,2022-08-13,0.2,0.02,True,"truck sells tomatoes only, no credit, no tokens; Punta Gorda column uses BAPIS sweet pepper"

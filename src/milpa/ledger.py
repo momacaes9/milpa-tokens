@@ -370,6 +370,49 @@ class Ledger:
             if qty > on_hand + 1e-9:
                 raise InsufficientReserve(f"only {on_hand:.1f} lb of {item} in the sale drums")
             self.sale_reserve[item] = on_hand - qty
+        self._consume(household, month, tokens)
+        self.redeemed_total += tokens
+        self._log(Event(month, "redeem", household, tokens=tokens, item=item, quantity=qty))
+        return qty
+
+    def redeem_grain_mix(self, month: int, household: str, tokens: int,
+                         items: tuple[str, ...] = ("corn", "beans")) -> dict[str, float]:
+        """Pay tokens in a mix of drum grains of the same total value.
+
+        Coverage is measured in value, so a drum can back a token without holding
+        a full 10 lb of corn or 3 lb of beans on its own. Mixing guarantees every
+        backed token can actually be paid. Returns lb handed over per item.
+        """
+        if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
+            raise LedgerError("tokens must be a positive integer")
+        name = self.month_name(month)
+        for item in items:
+            if item not in DURABLE_ITEMS:
+                raise LedgerError(f"{item!r} is not a drum grain")
+            if name not in self.rules.redeem_months.get(item, frozenset()):
+                raise OutsideWindow(f"{item} is not redeemable in {name}")
+        if self.held_by(household, month) < tokens:
+            raise InsufficientTokens(f"{household} holds {self.held_by(household, month)} valid tokens")
+        due = tokens * self.rules.token_value_usd
+        stock = {i: self.sale_reserve.get(i, 0.0) * self.rules.prices_usd[i] for i in items}
+        if sum(stock.values()) + 1e-9 < due:
+            raise InsufficientReserve("not enough grain in the sale drums")
+        handed: dict[str, float] = {}
+        for item in sorted(items, key=lambda i: -stock[i]):  # fullest first
+            usd = min(due, stock[item])
+            if usd <= 0:
+                continue
+            lb = usd / self.rules.prices_usd[item]
+            self.sale_reserve[item] -= lb
+            handed[item] = lb
+            due -= usd
+        self._consume(household, month, tokens)
+        self.redeemed_total += tokens
+        self._log(Event(month, "redeem", household, tokens=tokens, item="+".join(handed),
+                        quantity=sum(handed.values())))
+        return handed
+
+    def _consume(self, household: str, month: int, tokens: int) -> None:
         left = tokens
         for lot in sorted(self.lots, key=lambda lot: lot.issued_month):  # oldest first
             if lot.household != household or lot.remaining == 0 or self._is_expired(lot, month):
@@ -380,9 +423,6 @@ class Ledger:
             if left == 0:
                 break
         self.lots = [lot for lot in self.lots if lot.remaining > 0]
-        self.redeemed_total += tokens
-        self._log(Event(month, "redeem", household, tokens=tokens, item=item, quantity=qty))
-        return qty
 
     def expire(self, month: int) -> int:
         """Retire every lot older than ``expiry_months``. Returns tokens expired."""
