@@ -1,27 +1,30 @@
-"""The Milpa Token ledger: the rules Ernestine keeps in her paper notebook.
+"""The Libreta: the rules Ernestine keeps in her paper notebook.
 
 This module is a *proof of the rules*, not software for Ernestine. She keeps a
-paper notebook and numbered paper tokens. Every method here mirrors one line she
-would write by hand, and every check mirrors a rule she can apply by eye.
+paper notebook (the Libreta) and numbered, stamped paper tokens. Every method
+here mirrors one line she would write by hand.
 
-Guarantees enforced by :class:`Ledger`:
+The final token model (pitch deck):
 
-* **Closed loop.** Only Tierra Viva issues tokens and only Tierra Viva redeems
-  them. Tokens are named to one household; transfers and cash-out are refused.
-* **Atomic events.** Every operation validates first and mutates second. A
-  :meth:`Ledger.batch` block rolls back every change if any step fails.
-* **Backed.** Tokens may only be issued while the *sale* reserve (never the
-  family's food) covers every outstanding token at ``min_coverage``.
-* **Capped.** No household may hold more than ``max_tokens_per_household``.
-* **Expiring.** Tokens expire ``expiry_months`` after issue.
-* **Seasonal.** Issue and redemption are only open in configured months.
-* **No interest.** A token is worth the same basket the day it is issued and
-  the day it is redeemed.
+* **1 token = BZ$2 = US$1** of Ernestine's corn or beans. A store voucher, not
+  money: issued and redeemed only by Ernestine.
+* **Earned** only three ways: repaying credit in corn or beans at harvest (each
+  $1 of crop value is 1 token credited against the debt, and the grain goes into
+  drum 2); a 5% reward in tokens for credit repaid in cash within 30 days; and
+  half the neighbor's pickup fare at peak harvest.
+* **Spent** only at Ernestine's market table, only for corn or beans from drum 2,
+  only in the pre-harvest gap, at the case prices.
+* **Drum 1** is the family's food: never sold, never backs a token. **Drum 2**
+  holds grain from crop repayments plus her surplus. Tokens outstanding (US$)
+  may never exceed the value of corn and beans in drum 2.
+* Tokens issued in a year are capped at a share of sales (10%).
+* No transfers between neighbors, no cash-out, no interest.
 """
 
 from __future__ import annotations
 
 import copy
+import math
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Iterator, Mapping
@@ -31,11 +34,10 @@ MONTHS: tuple[str, ...] = (
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 )
 
-#: Items kept in sealed drums. They count toward backing.
-DURABLE_ITEMS: frozenset[str] = frozenset({"corn", "beans", "seed_corn"})
-#: Perishable items. They can be handed out only in the month they are on hand
-#: and never count toward backing.
-FRESH_ITEMS: frozenset[str] = frozenset({"plantain", "fresh_veg"})
+#: The only items a token can be earned or spent in.
+GRAINS: tuple[str, ...] = ("corn", "beans")
+
+_EPS = 1e-9
 
 
 class LedgerError(ValueError):
@@ -46,24 +48,36 @@ class OutsideWindow(LedgerError):
     """The operation is not open in this month."""
 
 
-class CapExceeded(LedgerError):
-    """A household would hold more tokens than the cap allows."""
+class NotCornOrBeans(LedgerError):
+    """Tokens are earned and spent in corn and beans only."""
 
 
 class InsufficientBacking(LedgerError):
-    """Issuing would leave outstanding tokens less than fully covered."""
+    """Tokens outstanding would exceed the value of grain in drum 2."""
+
+
+class CapExceeded(LedgerError):
+    """Tokens issued this year would exceed the cap (share of sales)."""
 
 
 class InsufficientTokens(LedgerError):
-    """The household does not hold enough valid tokens."""
+    """The holder does not have that many tokens."""
 
 
 class InsufficientReserve(LedgerError):
-    """There is not enough of the item on hand."""
+    """There is not enough of the grain in drum 2."""
+
+
+class DrumFull(LedgerError):
+    """Drum 2 cannot hold more than its capacity."""
+
+
+class Overpayment(LedgerError):
+    """A repayment larger than the debt."""
 
 
 class TransferNotAllowed(LedgerError):
-    """Tokens are named to one household and cannot move to another."""
+    """Tokens are logged to one holder and cannot move to another."""
 
 
 class CashOutNotAllowed(LedgerError):
@@ -71,161 +85,132 @@ class CashOutNotAllowed(LedgerError):
 
 
 class FamilyFoodProtected(LedgerError):
-    """The family's food is never part of the token reserve."""
+    """Drum 1 (the family's food) is never sold and never backs a token."""
 
 
 @dataclass(frozen=True)
 class Rules:
-    """The fixed rules of the system. Every value comes from the config file.
+    """Fixed rules of the system. Every value comes from the config file.
 
     Attributes:
-        in_kind_corn_lb: Pounds of corn one token redeems for. It also sets the
-            value of every other item: ``in_kind_corn_lb * price["corn"]``.
-        prices_usd: Ernestine's own selling price per unit for each item.
-        max_tokens_per_household: Cap on tokens one household may hold.
-        expiry_months: Tokens lapse this many months after issue.
-        min_coverage: Required ratio of sale-reserve value to outstanding
-            token value at the moment of issue (1.0 = fully backed).
-        issue_months: Months when work can be paid in tokens.
-        redeem_months: For each item, the months when it can be redeemed.
+        prices_usd: Ernestine's price per lb for corn and beans (Exhibit B).
+        token_value_usd: Face value of one token (US$1 = BZ$2).
+        reward_share: Tokens per $1 of credit repaid in cash on time (0.05).
+        on_time_days: Days within which a cash repayment earns the reward.
+        redeem_months: Calendar months in which tokens can be spent.
+        drum2_capacity_lb: Capacity of drum 2 (Exhibit E: ~250 lb).
     """
 
-    in_kind_corn_lb: float
     prices_usd: Mapping[str, float]
-    max_tokens_per_household: int
-    expiry_months: int
-    min_coverage: float
-    issue_months: frozenset[str]
-    redeem_months: Mapping[str, frozenset[str]]
+    token_value_usd: float = 1.0
+    reward_share: float = 0.05
+    on_time_days: int = 30
+    redeem_months: frozenset[str] = frozenset({"Jul", "Aug", "Sep"})
+    drum2_capacity_lb: float = 250.0
 
     def __post_init__(self) -> None:
-        if self.in_kind_corn_lb <= 0:
-            raise ValueError("in_kind_corn_lb must be positive")
-        if "corn" not in self.prices_usd:
-            raise ValueError("prices_usd must include 'corn'")
+        if set(self.prices_usd) != set(GRAINS):
+            raise ValueError("prices_usd must name exactly corn and beans")
         for item, price in self.prices_usd.items():
             if price <= 0:
                 raise ValueError(f"price for {item!r} must be positive")
-        if self.max_tokens_per_household < 1:
-            raise ValueError("max_tokens_per_household must be >= 1")
-        if self.expiry_months < 1:
-            raise ValueError("expiry_months must be >= 1")
-        if self.min_coverage < 1.0:
-            raise ValueError("min_coverage below 1.0 would allow unbacked tokens")
-        bad = [m for m in self.issue_months if m not in MONTHS]
-        for months in self.redeem_months.values():
-            bad += [m for m in months if m not in MONTHS]
+        if self.token_value_usd <= 0:
+            raise ValueError("token value must be positive")
+        if not 0 <= self.reward_share < 1:
+            raise ValueError("reward_share must be in [0, 1)")
+        if self.on_time_days < 1:
+            raise ValueError("on_time_days must be >= 1")
+        bad = [m for m in self.redeem_months if m not in MONTHS]
         if bad:
-            raise ValueError(f"unknown month names: {sorted(set(bad))}")
-        unknown = set(self.redeem_months) - set(self.prices_usd)
-        if unknown:
-            raise ValueError(f"redeemable items without a price: {sorted(unknown)}")
+            raise ValueError(f"unknown month names: {sorted(bad)}")
+        if self.drum2_capacity_lb <= 0:
+            raise ValueError("drum 2 capacity must be positive")
 
-    @property
-    def token_value_usd(self) -> float:
-        """Retail value of what one token redeems for, at Ernestine's prices."""
-        return self.in_kind_corn_lb * self.prices_usd["corn"]
-
-    def units_per_token(self, item: str) -> float:
-        """How many units (lb or each) of ``item`` one token redeems for."""
-        if item not in self.prices_usd:
-            raise LedgerError(f"{item!r} is not on the redemption list")
+    def lb_per_token(self, item: str) -> float:
+        """Pounds of ``item`` one token is worth: corn 3.33 lb, beans 1 lb."""
+        _grain(item)
         return self.token_value_usd / self.prices_usd[item]
 
 
-@dataclass
-class Lot:
-    """A run of paper tokens issued together, numbered ``first_serial`` onward."""
+def _grain(item: str) -> str:
+    if item not in GRAINS:
+        raise NotCornOrBeans(f"tokens are for corn and beans only, not {item!r}")
+    return item
 
-    household: str
-    issued_month: int
-    first_serial: int
-    count: int
-    remaining: int
+
+def _whole(n: object, what: str = "tokens") -> int:
+    if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+        raise LedgerError(f"{what} must be a positive whole number")
+    return n
 
 
 @dataclass(frozen=True)
 class Event:
-    """One line in the notebook."""
+    """One line in the Libreta."""
 
-    month: int
+    month: str
     kind: str
-    household: str | None = None
-    tokens: int = 0
-    hours: float = 0.0
+    holder: str | None = None
+    tokens: float = 0
     item: str | None = None
-    quantity: float = 0.0
+    lb: float = 0.0
     usd: float = 0.0
+    serials: tuple[int, int] | None = None
     note: str = ""
 
 
 @dataclass
 class Ledger:
-    """State of the notebook plus the rules that guard every change.
+    """State of the Libreta and the two drums, plus the rules that guard every change.
 
-    Months are integers counted from the start of the simulation. ``start_month``
-    maps month 0 to a calendar month name, so ``month_name(0) == start_month``.
+    ``annual_cap_tokens`` is the most tokens that may be issued between two calls
+    to :meth:`start_year` (10% of sales; ``None`` means no cap).
     """
 
     rules: Rules
-    start_month: str = "Jan"
-    family_reserve_lb: dict[str, float] = field(default_factory=dict)
-    sale_reserve: dict[str, float] = field(default_factory=dict)
-    fresh_on_hand: dict[str, float] = field(default_factory=dict)
-    fresh_month: int | None = None
-    lots: list[Lot] = field(default_factory=list)
+    annual_cap_tokens: float | None = None
+    family_drum_lb: dict[str, float] = field(default_factory=dict)
+    drum2_lb: dict[str, float] = field(default_factory=dict)
+    held: dict[str, int] = field(default_factory=dict)
     debts_usd: dict[str, float] = field(default_factory=dict)
+    reward_carry_usd: dict[str, float] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
     next_serial: int = 1
+    issued_this_year: int = 0
     issued_total: int = 0
     redeemed_total: int = 0
-    expired_total: int = 0
+    crop_tokens_credited: float = 0.0
 
-    def __post_init__(self) -> None:
-        if self.start_month not in MONTHS:
-            raise ValueError(f"unknown start month {self.start_month!r}")
-
-    # ------------------------------------------------------------------ helpers
-    def month_name(self, month: int) -> str:
-        """Calendar name of simulation month ``month``."""
-        if month < 0:
-            raise ValueError("month must be >= 0")
-        return MONTHS[(MONTHS.index(self.start_month) + month) % 12]
-
-    def held_by(self, household: str, month: int | None = None) -> int:
-        """Valid tokens a household holds (excluding expired lots at ``month``)."""
-        return sum(
-            lot.remaining for lot in self.lots
-            if lot.household == household and lot.remaining > 0
-            and (month is None or not self._is_expired(lot, month))
-        )
-
+    # ------------------------------------------------------------------ views
     @property
     def outstanding(self) -> int:
-        """Tokens issued and not yet redeemed or expired."""
-        return sum(lot.remaining for lot in self.lots)
+        """Tokens issued and not yet spent."""
+        return sum(self.held.values())
 
-    def reserve_value_usd(self) -> float:
-        """Value of the durable sale reserve at Ernestine's prices."""
-        return sum(qty * self.rules.prices_usd[item] for item, qty in self.sale_reserve.items())
+    @property
+    def outstanding_usd(self) -> float:
+        return self.outstanding * self.rules.token_value_usd
 
-    def coverage_ratio(self, extra_tokens: int = 0) -> float:
-        """Sale-reserve value divided by the value of outstanding tokens.
+    def drum2_value_usd(self) -> float:
+        """Value of corn and beans in drum 2 at Ernestine's prices."""
+        return sum(lb * self.rules.prices_usd[i] for i, lb in self.drum2_lb.items())
 
-        Returns ``float('inf')`` when nothing is outstanding.
-        """
-        liability = (self.outstanding + extra_tokens) * self.rules.token_value_usd
-        if liability == 0:
-            return float("inf")
-        return self.reserve_value_usd() / liability
+    def drum2_total_lb(self) -> float:
+        return sum(self.drum2_lb.values())
+
+    def coverage_ratio(self) -> float | None:
+        """Drum-2 value / tokens outstanding (US$). ``None`` with nothing outstanding."""
+        if self.outstanding == 0:
+            return None
+        return self.drum2_value_usd() / self.outstanding_usd
+
+    def free_drum2_value_usd(self) -> float:
+        """Drum-2 value not needed to back tokens outstanding (sellable for cash)."""
+        return max(0.0, self.drum2_value_usd() - self.outstanding_usd)
 
     def backable_tokens(self) -> int:
-        """How many more tokens could be issued right now under the coverage rule."""
-        capacity = self.reserve_value_usd() / (self.rules.min_coverage * self.rules.token_value_usd)
-        return max(0, int(capacity + 1e-9) - self.outstanding)
-
-    def _is_expired(self, lot: Lot, month: int) -> bool:
-        return month - lot.issued_month >= self.rules.expiry_months
+        """How many more tokens drum 2 could back right now."""
+        return max(0, math.floor(self.free_drum2_value_usd() / self.rules.token_value_usd + _EPS))
 
     def _log(self, event: Event) -> None:
         self.events.append(event)
@@ -241,167 +226,184 @@ class Ledger:
             self.__dict__.update(snapshot)
             raise
 
-    # ----------------------------------------------------------- reserve moves
+    def start_year(self, annual_cap_tokens: float | None) -> None:
+        """Open a new year in the Libreta and reset the issue cap."""
+        self.annual_cap_tokens = annual_cap_tokens
+        self.issued_this_year = 0
+
+    # ------------------------------------------------------------------ drums
     def set_family_food(self, item: str, lb: float) -> None:
-        """Record the family's own food. It is never touched by token rules."""
+        """Record drum 1, the family's food. No token rule ever reads it."""
         if lb < 0:
             raise LedgerError("family food cannot be negative")
-        self.family_reserve_lb[item] = lb
+        self.family_drum_lb[item] = lb
 
-    def add_to_reserve(self, month: int, item: str, lb: float, note: str = "") -> None:
-        """Put dried grain into the *sale* drums."""
-        if item not in DURABLE_ITEMS:
-            raise LedgerError(f"{item!r} does not keep in a drum")
+    def take_from_family_drum(self, *_: object, **__: object) -> None:
+        """Always refused: drum 1 is never sold and never backs a token."""
+        raise FamilyFoodProtected("drum 1 is the family's food: never sold, never backs tokens")
+
+    def add_to_drum2(self, month: str, item: str, lb: float, note: str = "") -> None:
+        """Put dried corn or beans (her own surplus) into drum 2."""
+        _grain(item)
         if lb <= 0:
             raise LedgerError("quantity must be positive")
-        self.sale_reserve[item] = self.sale_reserve.get(item, 0.0) + lb
-        self._log(Event(month, "reserve_in", item=item, quantity=lb, note=note))
+        if self.drum2_total_lb() + lb > self.rules.drum2_capacity_lb + _EPS:
+            raise DrumFull(f"drum 2 holds {self.rules.drum2_capacity_lb:.0f} lb")
+        self.drum2_lb[item] = self.drum2_lb.get(item, 0.0) + lb
+        self._log(Event(month, "drum2_in", item=item, lb=lb, note=note))
 
-    def take_from_family_food(self, *_: object, **__: object) -> None:
-        """Always refused: the family's food is not a token reserve."""
-        raise FamilyFoodProtected("the family's food is never part of the token reserve")
-
-    def sell_from_reserve(self, month: int, item: str, lb: float) -> float:
-        """Sell grain from the sale drums, keeping every outstanding token covered.
+    def sell_from_drum2(self, month: str, item: str, lb: float) -> float:
+        """Sell grain from drum 2 for cash, keeping every token outstanding backed.
 
         Returns the sale value in USD.
         """
+        _grain(item)
         if lb <= 0:
             raise LedgerError("quantity must be positive")
-        on_hand = self.sale_reserve.get(item, 0.0)
-        if lb > on_hand + 1e-9:
-            raise InsufficientReserve(f"only {on_hand:.1f} lb of {item} in the sale drums")
+        on_hand = self.drum2_lb.get(item, 0.0)
+        if lb > on_hand + _EPS:
+            raise InsufficientReserve(f"only {on_hand:.1f} lb of {item} in drum 2")
         usd = lb * self.rules.prices_usd[item]
-        remaining_value = self.reserve_value_usd() - usd
-        needed = self.outstanding * self.rules.token_value_usd * self.rules.min_coverage
-        if remaining_value + 1e-9 < needed:
-            raise InsufficientBacking(
-                "selling this would leave outstanding tokens uncovered"
-            )
-        self.sale_reserve[item] = on_hand - lb
-        self._log(Event(month, "reserve_sale", item=item, quantity=lb, usd=usd))
+        if self.drum2_value_usd() - usd + _EPS < self.outstanding_usd:
+            raise InsufficientBacking("selling this would leave tokens outstanding unbacked")
+        self.drum2_lb[item] = on_hand - lb
+        self._log(Event(month, "drum2_sale", item=item, lb=lb, usd=usd))
         return usd
 
-    def free_reserve_value_usd(self) -> float:
-        """Reserve value not needed to back outstanding tokens (sellable for cash)."""
-        needed = self.outstanding * self.rules.token_value_usd * self.rules.min_coverage
-        return max(0.0, self.reserve_value_usd() - needed)
-
-    def set_fresh_on_hand(self, month: int, item: str, qty: float) -> None:
-        """Declare surplus fresh produce on hand this month (perishable)."""
-        if item not in FRESH_ITEMS:
-            raise LedgerError(f"{item!r} is not a fresh item")
-        if qty < 0:
-            raise LedgerError("quantity cannot be negative")
-        if self.fresh_month != month:
-            self.fresh_on_hand = {}
-            self.fresh_month = month
-        self.fresh_on_hand[item] = qty
-
     # ------------------------------------------------------------- credit book
-    def record_credit(self, month: int, household: str, usd: float) -> None:
-        """A sale on credit, written in the book and read back to the buyer."""
+    def record_credit(self, month: str, household: str, usd: float) -> None:
+        """A sale on credit, written in the Libreta and read back to the buyer."""
         if usd <= 0:
             raise LedgerError("credit amount must be positive")
         self.debts_usd[household] = self.debts_usd.get(household, 0.0) + usd
         self._log(Event(month, "credit", household, usd=usd))
 
-    def settle_debt_with_labor(self, month: int, household: str, hours: float,
-                               wage_usd_per_hour: float) -> float:
-        """Pay an old balance in hands: hours of work cancel debt at the wage.
-
-        No tokens are issued; the debt shrinks. Returns USD of debt cancelled.
-        """
-        if hours <= 0 or wage_usd_per_hour <= 0:
-            raise LedgerError("hours and wage must be positive")
-        if self.month_name(month) not in self.rules.issue_months:
-            raise OutsideWindow(f"labor is only booked in work months, not {self.month_name(month)}")
+    def _reduce_debt(self, household: str, usd: float) -> None:
         owed = self.debts_usd.get(household, 0.0)
-        usd = hours * wage_usd_per_hour
-        if usd > owed + 1e-9:
-            raise LedgerError(f"{household} owes ${owed:.2f}; {hours} h would overpay")
-        self.debts_usd[household] = owed - usd
-        self._log(Event(month, "debt_labor", household, hours=hours, usd=usd))
-        return usd
+        if usd > owed + _EPS:
+            raise Overpayment(f"{household} owes ${owed:.2f}, not ${usd:.2f}")
+        self.debts_usd[household] = max(0.0, owed - usd)
+
+    def repay_in_crops(self, month: str, household: str, item: str, lb: float) -> float:
+        """Repay credit in corn or beans at the case price.
+
+        Each $1 of crop value is 1 token credited against the debt, and the grain
+        goes into drum 2. Credited tokens settle debt; they are not vouchers in
+        circulation. Returns the tokens credited.
+        """
+        _grain(item)
+        if lb <= 0:
+            raise LedgerError("quantity must be positive")
+        usd = lb * self.rules.prices_usd[item]
+        if self.drum2_total_lb() + lb > self.rules.drum2_capacity_lb + _EPS:
+            raise DrumFull(f"drum 2 holds {self.rules.drum2_capacity_lb:.0f} lb")
+        self._reduce_debt(household, usd)
+        self.drum2_lb[item] = self.drum2_lb.get(item, 0.0) + lb
+        tokens = usd / self.rules.token_value_usd
+        self.crop_tokens_credited += tokens
+        self._log(Event(month, "repay_crops", household, tokens=tokens, item=item, lb=lb, usd=usd))
+        return tokens
+
+    def repay_cash(self, month: str, household: str, usd: float, days_late: int) -> int:
+        """Repay credit in cash. Within ``on_time_days`` it earns the reward.
+
+        The reward (5% of the payment) is kept in cents in the Libreta; a paper
+        token is stamped for each full $1 of reward. If drum 2 cannot back the
+        token yet (or the year's cap is reached) the reward stays pending in
+        the Libreta and no token is stamped. Returns tokens issued now.
+        """
+        if usd <= 0:
+            raise LedgerError("payment must be positive")
+        if days_late < 0:
+            raise LedgerError("days_late cannot be negative")
+        on_time = days_late <= self.rules.on_time_days
+        self._reduce_debt(household, usd)
+        self._log(Event(month, "repay_cash", household, usd=usd,
+                        note="on time" if on_time else "late, no reward"))
+        if not on_time:
+            return 0
+        carry = self.reward_carry_usd.get(household, 0.0) + usd * self.rules.reward_share
+        due = math.floor(carry / self.rules.token_value_usd + _EPS)
+        issued = 0
+        if due:
+            try:
+                self.issue(month, household, due, note="5% on-time reward")
+                issued = due
+            except (InsufficientBacking, CapExceeded):
+                self._log(Event(month, "reward_pending", household, tokens=due))
+        self.reward_carry_usd[household] = carry - issued * self.rules.token_value_usd
+        return issued
+
+    def pay_pickup_fare(self, month: str, driver: str, fare_usd: float,
+                        token_share: float) -> tuple[float, int]:
+        """Pay a neighbor's pickup ride: part cash, part tokens.
+
+        Returns ``(cash_usd, tokens)``. A transport fare, not labor.
+        """
+        if fare_usd <= 0 or not 0 <= token_share <= 1:
+            raise LedgerError("fare must be positive and token share in [0, 1]")
+        tokens_usd = fare_usd * token_share
+        tokens = tokens_usd / self.rules.token_value_usd
+        if abs(tokens - round(tokens)) > _EPS:
+            raise LedgerError("the token part of a fare must be whole tokens")
+        tokens = int(round(tokens))
+        cash = fare_usd - tokens * self.rules.token_value_usd
+        with self.batch():
+            if tokens:
+                self.issue(month, driver, tokens, note="half pickup fare")
+            self._log(Event(month, "pickup_fare", driver, tokens=tokens, usd=cash))
+        return cash, tokens
 
     # ---------------------------------------------------------------- tokens
-    def issue(self, month: int, household: str, hours: int, note: str = "") -> Lot:
-        """Pay ``hours`` of work with the same number of tokens (1 token = 1 hour)."""
-        if not isinstance(hours, int) or isinstance(hours, bool) or hours <= 0:
-            raise LedgerError("tokens are whole hours: hours must be a positive integer")
-        name = self.month_name(month)
-        if name not in self.rules.issue_months:
-            raise OutsideWindow(f"tokens are only issued in work months, not {name}")
-        if self.held_by(household, month) + hours > self.rules.max_tokens_per_household:
-            raise CapExceeded(
-                f"{household} would hold more than {self.rules.max_tokens_per_household} tokens"
-            )
-        if self.coverage_ratio(extra_tokens=hours) + 1e-9 < self.rules.min_coverage:
+    def issue(self, month: str, holder: str, tokens: int, note: str = "") -> tuple[int, int]:
+        """Stamp and number ``tokens`` paper tokens for ``holder``.
+
+        Refused if drum 2 would not cover every token outstanding, or if the
+        year's cap would be exceeded. Returns the serial range.
+        """
+        _whole(tokens)
+        if (self.annual_cap_tokens is not None
+                and self.issued_this_year + tokens > self.annual_cap_tokens + _EPS):
+            raise CapExceeded(f"cap is {self.annual_cap_tokens:.0f} tokens this year")
+        if (self.outstanding + tokens) * self.rules.token_value_usd > self.drum2_value_usd() + _EPS:
             raise InsufficientBacking(
-                f"sale drums cover {self.backable_tokens()} more tokens, not {hours}"
-            )
-        lot = Lot(household, month, self.next_serial, hours, hours)
-        self.lots.append(lot)
-        self.next_serial += hours
-        self.issued_total += hours
-        self._log(Event(month, "issue", household, tokens=hours, hours=float(hours), note=note))
-        return lot
+                f"drum 2 backs {self.backable_tokens()} more tokens, not {tokens}")
+        serials = (self.next_serial, self.next_serial + tokens - 1)
+        self.next_serial += tokens
+        self.held[holder] = self.held.get(holder, 0) + tokens
+        self.issued_this_year += tokens
+        self.issued_total += tokens
+        self._log(Event(month, "issue", holder, tokens=tokens, serials=serials, note=note))
+        return serials
 
-    def redeem(self, month: int, household: str, tokens: int, item: str) -> float:
-        """Exchange tokens for food at Tierra Viva. Returns the units handed over."""
-        if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
-            raise LedgerError("tokens must be a positive integer")
-        name = self.month_name(month)
-        months = self.rules.redeem_months.get(item)
-        if months is None:
-            raise LedgerError(f"{item!r} is not on the redemption list")
-        if name not in months:
-            raise OutsideWindow(f"{item} is not redeemable in {name}")
-        if self.held_by(household, month) < tokens:
-            raise InsufficientTokens(f"{household} holds {self.held_by(household, month)} valid tokens")
-        qty = tokens * self.rules.units_per_token(item)
-        if item in FRESH_ITEMS:
-            on_hand = self.fresh_on_hand.get(item, 0.0) if self.fresh_month == month else 0.0
-            if qty > on_hand + 1e-9:
-                raise InsufficientReserve(f"only {on_hand:.1f} of {item} on hand this month")
-            self.fresh_on_hand[item] = on_hand - qty
-        else:
-            on_hand = self.sale_reserve.get(item, 0.0)
-            if qty > on_hand + 1e-9:
-                raise InsufficientReserve(f"only {on_hand:.1f} lb of {item} in the sale drums")
-            self.sale_reserve[item] = on_hand - qty
-        left = tokens
-        for lot in sorted(self.lots, key=lambda lot: lot.issued_month):  # oldest first
-            if lot.household != household or lot.remaining == 0 or self._is_expired(lot, month):
-                continue
-            take = min(left, lot.remaining)
-            lot.remaining -= take
-            left -= take
-            if left == 0:
-                break
-        self.lots = [lot for lot in self.lots if lot.remaining > 0]
+    def redeem(self, month: str, holder: str, tokens: int, item: str) -> float:
+        """Spend tokens at the market table for corn or beans from drum 2.
+
+        Returns the lb handed over.
+        """
+        _whole(tokens)
+        _grain(item)
+        if month not in self.rules.redeem_months:
+            raise OutsideWindow(f"tokens are spent in the pre-harvest gap, not {month}")
+        if self.held.get(holder, 0) < tokens:
+            raise InsufficientTokens(f"{holder} holds {self.held.get(holder, 0)} tokens")
+        lb = tokens * self.rules.lb_per_token(item)
+        on_hand = self.drum2_lb.get(item, 0.0)
+        if lb > on_hand + _EPS:
+            raise InsufficientReserve(f"only {on_hand:.1f} lb of {item} in drum 2")
+        self.drum2_lb[item] = on_hand - lb
+        self.held[holder] -= tokens
+        if self.held[holder] == 0:
+            del self.held[holder]
         self.redeemed_total += tokens
-        self._log(Event(month, "redeem", household, tokens=tokens, item=item, quantity=qty))
-        return qty
-
-    def expire(self, month: int) -> int:
-        """Retire every lot older than ``expiry_months``. Returns tokens expired."""
-        expired = 0
-        keep: list[Lot] = []
-        for lot in self.lots:
-            if self._is_expired(lot, month):
-                expired += lot.remaining
-                self._log(Event(month, "expire", lot.household, tokens=lot.remaining))
-            else:
-                keep.append(lot)
-        self.lots = keep
-        self.expired_total += expired
-        return expired
+        self._log(Event(month, "redeem", holder, tokens=tokens, item=item, lb=lb,
+                        usd=tokens * self.rules.token_value_usd))
+        return lb
 
     def transfer(self, *_: object, **__: object) -> None:
-        """Always refused: tokens are named to one household."""
-        raise TransferNotAllowed("Milpa Tokens are named to one household and cannot be passed on")
+        """Always refused: no transfers between neighbors."""
+        raise TransferNotAllowed("tokens are logged to one holder and cannot be passed on")
 
     def cash_out(self, *_: object, **__: object) -> None:
-        """Always refused: tokens are never exchanged for money."""
-        raise CashOutNotAllowed("Milpa Tokens are redeemed for food only, never for cash")
+        """Always refused: tokens are never exchanged for cash."""
+        raise CashOutNotAllowed("tokens buy corn and beans at Tierra Viva only, never cash")

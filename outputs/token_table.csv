@@ -1,0 +1,3 @@
+item,price_usd_per_lb,lb_per_token,tokens_per_lb,example_lb,example_tokens
+corn,0.3,3.333333,0.3,10,3.0
+beans,1.0,1.0,1.0,10,10.0

@@ -3,20 +3,41 @@
     "name": "Tierra Viva Farm - Milpa Tokens",
     "case": "UNC International Consulting, 'Tierra Viva' case packet, Fall 2026 (Exhibits A-F)",
     "currency": "USD unless a key ends in _bzd",
-    "note": "Values under 'case' are copied exactly from the case packet. Values under 'token' and 'simulation' are design choices or labelled assumptions; see 'assumptions'."
+    "note": "Values under 'case' are copied exactly from the case packet. Values under 'token' come from the pitch deck or are labelled design choices/assumptions; see 'assumptions'.",
+    "deck": "Team pitch deck, final token model (corn and beans only, no labor)"
   },
   "case": {
     "fx_bzd_per_usd": 2.0,
     "savings_usd": 350,
     "family_size": 6,
-    "cash_costs_usd": {"bus_fares": 120, "pickup_rides": 240, "tools_and_supplies": 100},
+    "cash_costs_usd": {
+      "bus_fares": 120,
+      "pickup_rides": 240,
+      "tools_and_supplies": 100
+    },
     "years": {
       "normal": {
         "month_types": {
-          "pre_harvest": {"months": 3, "sales_per_month": 70, "credit_share": 0.55},
-          "typical": {"months": 5, "sales_per_month": 120, "credit_share": 0.45},
-          "harvest": {"months": 3, "sales_per_month": 170, "credit_share": 0.35},
-          "storm": {"months": 1, "sales_per_month": 50, "credit_share": 0.60}
+          "pre_harvest": {
+            "months": 3,
+            "sales_per_month": 70,
+            "credit_share": 0.55
+          },
+          "typical": {
+            "months": 5,
+            "sales_per_month": 120,
+            "credit_share": 0.45
+          },
+          "harvest": {
+            "months": 3,
+            "sales_per_month": 170,
+            "credit_share": 0.35
+          },
+          "storm": {
+            "months": 1,
+            "sales_per_month": 50,
+            "credit_share": 0.6
+          }
         },
         "total_sales_usd": 1370,
         "credit_usd": 594,
@@ -27,14 +48,30 @@
       },
       "bad": {
         "month_types": {
-          "pre_harvest": {"months": 4, "sales_per_month": 60, "credit_share": null},
-          "typical": {"months": 3, "sales_per_month": 90, "credit_share": null},
-          "harvest": {"months": 2, "sales_per_month": 120, "credit_share": null},
-          "storm": {"months": 3, "sales_per_month": 50, "credit_share": null}
+          "pre_harvest": {
+            "months": 4,
+            "sales_per_month": 60,
+            "credit_share": null
+          },
+          "typical": {
+            "months": 3,
+            "sales_per_month": 90,
+            "credit_share": null
+          },
+          "harvest": {
+            "months": 2,
+            "sales_per_month": 120,
+            "credit_share": null
+          },
+          "storm": {
+            "months": 3,
+            "sales_per_month": 50,
+            "credit_share": null
+          }
         },
         "total_sales_usd": 900,
         "credit_usd": 491,
-        "unpaid_share_of_credit": 0.40,
+        "unpaid_share_of_credit": 0.4,
         "unpaid_usd": 196,
         "cash_collected_usd": 704,
         "net_cash_income_usd": 244,
@@ -42,13 +79,49 @@
       }
     },
     "products": {
-      "seed_corn": {"price_usd": 1.00, "unit": "lb", "share_of_sales": 0.20, "sales_usd": 274},
-      "plantain": {"price_usd": 0.25, "unit": "each", "share_of_sales": 0.20, "sales_usd": 274},
-      "corn": {"price_usd": 0.30, "unit": "lb", "share_of_sales": 0.15, "sales_usd": 206},
-      "beans": {"price_usd": 1.00, "unit": "lb", "share_of_sales": 0.15, "sales_usd": 206},
-      "fresh_veg": {"price_usd": 1.50, "unit": "lb", "share_of_sales": 0.15, "sales_usd": 206, "label": "peppers, tomatoes and herbs"},
-      "cassava": {"price_usd": 0.40, "unit": "lb", "share_of_sales": 0.10, "sales_usd": 137},
-      "cacao": {"price_usd": 1.75, "unit": "lb dried", "share_of_sales": 0.05, "sales_usd": 68}
+      "seed_corn": {
+        "price_usd": 1.0,
+        "unit": "lb",
+        "share_of_sales": 0.2,
+        "sales_usd": 274
+      },
+      "plantain": {
+        "price_usd": 0.25,
+        "unit": "each",
+        "share_of_sales": 0.2,
+        "sales_usd": 274
+      },
+      "corn": {
+        "price_usd": 0.3,
+        "unit": "lb",
+        "share_of_sales": 0.15,
+        "sales_usd": 206
+      },
+      "beans": {
+        "price_usd": 1.0,
+        "unit": "lb",
+        "share_of_sales": 0.15,
+        "sales_usd": 206
+      },
+      "fresh_veg": {
+        "price_usd": 1.5,
+        "unit": "lb",
+        "share_of_sales": 0.15,
+        "sales_usd": 206,
+        "label": "peppers, tomatoes and herbs"
+      },
+      "cassava": {
+        "price_usd": 0.4,
+        "unit": "lb",
+        "share_of_sales": 0.1,
+        "sales_usd": 137
+      },
+      "cacao": {
+        "price_usd": 1.75,
+        "unit": "lb dried",
+        "share_of_sales": 0.05,
+        "sales_usd": 68
+      }
     },
     "customers": {
       "regular_households": 40,
@@ -56,19 +129,29 @@
       "occasional_buyers": 25,
       "seed_buying_farmers": 20,
       "households_owing": 15,
-      "turned_away_per_week": [8, 10],
+      "turned_away_per_week": [
+        8,
+        10
+      ],
       "turned_away_weeks": 13,
-      "turned_away_avg_purchase_usd": 1.50,
-      "harvest_fresh_spoilage_share": 0.20
+      "turned_away_avg_purchase_usd": 1.5,
+      "harvest_fresh_spoilage_share": 0.2
     },
-    "time_hours_per_week": {
-      "field_work": 26, "deliveries": 10, "household": 9,
-      "drying_storing": 4, "market_days": 4, "collecting_debts": 3
+    "drums": {
+      "cost_usd_each": 100,
+      "capacity_lb": 250,
+      "neighbors_wanting_storage": 2
     },
-    "drums": {"cost_usd_each": 100, "capacity_lb": 250, "neighbors_wanting_storage": 2},
     "truck": {
-      "sells": ["plantain", "tomato", "onion"],
-      "discount_vs_ernestine": [0.10, 0.15],
+      "sells": [
+        "plantain",
+        "tomato",
+        "onion"
+      ],
+      "discount_vs_ernestine": [
+        0.1,
+        0.15
+      ],
       "offers_credit": false,
       "delivers": false,
       "accepts_tokens": false
@@ -76,33 +159,176 @@
   },
   "calendar": {
     "start_month": "Feb",
-    "status": "ASSUMPTION. The case gives month-type counts, not dates. Planting months are sourced (IICA/SHI-B 2013: Toledo maize planted May/June, beans and 'matambre' maize in December). Wet season June-October is from case Exhibit F. Harvest and pre-harvest months are inferred and labelled assumptions.",
+    "status": "ASSUMPTION. The case gives month-type counts, not dates. Wet season June-October is from case Exhibit F; harvest (Nov-Jan) and the 13-week pre-harvest gap (Jul-Sep) are inferred and labelled assumptions.",
     "normal": {
-      "Feb": "typical", "Mar": "typical", "Apr": "typical", "May": "typical", "Jun": "typical",
-      "Jul": "pre_harvest", "Aug": "pre_harvest", "Sep": "pre_harvest",
-      "Oct": "storm", "Nov": "harvest", "Dec": "harvest", "Jan": "harvest"
+      "Feb": "typical",
+      "Mar": "typical",
+      "Apr": "typical",
+      "May": "typical",
+      "Jun": "typical",
+      "Jul": "pre_harvest",
+      "Aug": "pre_harvest",
+      "Sep": "pre_harvest",
+      "Oct": "storm",
+      "Nov": "harvest",
+      "Dec": "harvest",
+      "Jan": "harvest"
     },
     "bad": {
-      "Feb": "harvest", "Mar": "typical", "Apr": "typical", "May": "typical",
-      "Jun": "pre_harvest", "Jul": "pre_harvest", "Aug": "pre_harvest", "Sep": "pre_harvest",
-      "Oct": "storm", "Nov": "storm", "Dec": "storm", "Jan": "harvest"
-    },
-    "planting_months": ["May", "Jun", "Dec"],
-    "seed_sale_months": ["Apr", "Nov"]
+      "Feb": "harvest",
+      "Mar": "typical",
+      "Apr": "typical",
+      "May": "typical",
+      "Jun": "pre_harvest",
+      "Jul": "pre_harvest",
+      "Aug": "pre_harvest",
+      "Sep": "pre_harvest",
+      "Oct": "storm",
+      "Nov": "storm",
+      "Dec": "storm",
+      "Jan": "harvest"
+    }
   },
   "token": {
-    "unit": "1 token = 1 hour of work for Tierra Viva at planting or harvest",
-    "in_kind_corn_lb": 10,
-    "max_tokens_per_household": 10,
-    "expiry_months": 12,
-    "min_coverage": 1.0,
-    "issue_windows": "planting months plus harvest months of the year type",
-    "redeem_windows": {
-      "corn": ["pre_harvest", "storm"],
-      "beans": ["pre_harvest", "storm"],
-      "seed_corn": ["seed_sale_months"],
-      "plantain": ["harvest"],
-      "fresh_veg": ["harvest"]
+    "definition": "1 token = BZ$2 = US$1 of Ernestine's corn or beans. Paper, stamped, numbered, logged in the Libreta. A store voucher, not money.",
+    "face_value_usd": 1.0,
+    "face_value_bzd": 2.0,
+    "redeemable_items": [
+      "corn",
+      "beans"
+    ],
+    "redeem_month_types": [
+      "pre_harvest"
+    ],
+    "earn": {
+      "crop_repayment": {
+        "items": [
+          "corn",
+          "beans"
+        ],
+        "note": "Credit repaid in corn ($0.30/lb) or beans ($1.00/lb), Exhibit B. Each $1 of crop value = 1 token credited against the debt; the grain goes into drum 2. Credits reduce debt; they are not vouchers in circulation."
+      },
+      "on_time_cash_reward_share": 0.05,
+      "on_time_days": 30,
+      "pickup": {
+        "rides_per_year": 12,
+        "fare_usd": 10.0,
+        "token_share_of_fare": 0.5
+      }
+    },
+    "cap_share_of_sales": 0.1,
+    "cost_share_of_face": {
+      "base": 0.75,
+      "conservative": 0.9,
+      "optimistic": 0.6
+    },
+    "unpaid_share_with_libreta": {
+      "base": 0.1,
+      "conservative": 0.15,
+      "optimistic": 0.08
+    },
+    "on_time_share_of_repaid": 0.5,
+    "drum2_capture_of_turned_away": 0.7,
+    "turned_away_per_week_used": 9,
+    "drums": {
+      "total": 2,
+      "family": 1,
+      "sale": 1
+    },
+    "drum2_fill_lb": {
+      "corn": 50,
+      "beans": 200
+    },
+    "crop_repayment_lb": {
+      "corn": 50,
+      "beans": 100
+    },
+    "crop_repaying_farmers": 5
+  },
+  "assumptions": [
+    {
+      "key": "calendar.normal",
+      "value": "see calendar",
+      "status": "assumption",
+      "why": "Case gives month-type counts only; harvest Nov-Jan and the pre-harvest gap Jul-Sep are inferred; storm month in the June-October wet season (Exhibit F)."
+    },
+    {
+      "key": "case.years.bad monthly credit",
+      "value": "normal-year shares scaled to $491",
+      "status": "derived",
+      "why": "Case gives the bad-year credit total only."
+    },
+    {
+      "key": "token.face_value_usd",
+      "value": 1.0,
+      "status": "pitch deck",
+      "why": "1 token = BZ$2 = US$1 at the case exchange rate (BZ$2 = US$1)."
+    },
+    {
+      "key": "token.unpaid_share_with_libreta",
+      "value": "10% base, 15% conservative, 8% optimistic",
+      "status": "pitch deck",
+      "why": "Case: 25% of credit is never repaid (Exhibit A). The written, read-back Libreta plus the on-time reward is assumed to cut that to 10%."
+    },
+    {
+      "key": "token.on_time_share_of_repaid",
+      "value": 0.5,
+      "status": "assumption (reproduces the deck)",
+      "why": "Half of repaid credit is repaid in cash within 30 days and earns the 5% reward: 594 x 90% x 50% x 5% = 13 tokens."
+    },
+    {
+      "key": "token.on_time_cash_reward_share",
+      "value": 0.05,
+      "status": "pitch deck",
+      "why": "5% reward in tokens for cash repaid within 30 days."
+    },
+    {
+      "key": "token.earn.pickup",
+      "value": "12 rides x $10, half in tokens",
+      "status": "pitch deck",
+      "why": "A neighbor's pickup at peak harvest replaces the $240 a year of pickup rides (case cash costs); half the $10 fare is paid in tokens = 60 tokens a year. A transport fare, not labor."
+    },
+    {
+      "key": "token.cost_share_of_face",
+      "value": "75% base, 90% conservative, 60% optimistic",
+      "status": "pitch deck",
+      "why": "What a redeemed $1 token costs Ernestine in produce she would otherwise sell."
+    },
+    {
+      "key": "token.cap_share_of_sales",
+      "value": 0.1,
+      "status": "pitch deck",
+      "why": "Tokens issued in a year are capped at 10% of sales ($137 in a normal year)."
+    },
+    {
+      "key": "token.drum2_capture_of_turned_away",
+      "value": 0.7,
+      "status": "pitch deck",
+      "why": "Drum 2 lets her serve 70% of the pre-harvest buyers she now turns away."
+    },
+    {
+      "key": "token.turned_away_per_week_used",
+      "value": 9,
+      "status": "case-derived",
+      "why": "Midpoint of 8-10 buyers a week for 13 weeks at $1.50 (Exhibit D): $176."
+    },
+    {
+      "key": "token.drums",
+      "value": "2 drums: drum 1 family, drum 2 sale",
+      "status": "case-derived",
+      "why": "Exhibit E: $100 each, ~250 lb each. Drum 1 is the family's food, never sold, never backs tokens."
+    },
+    {
+      "key": "token.drum2_fill_lb",
+      "value": "50 lb corn + 200 lb beans",
+      "status": "assumption",
+      "why": "Beans carry 3.3x the value of corn per lb, so a mostly-bean drum 2 ($215) can back every token and still serve $123 of pre-harvest sales within 250 lb."
+    },
+    {
+      "key": "token.crop_repayment_lb",
+      "value": "50 lb corn + 100 lb beans",
+      "status": "assumption",
+      "why": "Five seed-buying farmers (Exhibit D: 20 buy seed) each repay $23 of seed credit in 10 lb corn + 20 lb beans at harvest. The rest of drum 2 is her own surplus."
     }
-  }
+  ]
 }

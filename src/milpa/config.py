@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from .ledger import MONTHS, Rules
+from .ledger import GRAINS, MONTHS, Rules
 
 #: Default config shipped with the repo.
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "tierra_viva.json"
 
 MONTH_TYPES = ("pre_harvest", "typical", "harvest", "storm")
 YEAR_TYPES = ("normal", "bad")
-REDEEMABLE = ("corn", "beans", "seed_corn", "plantain", "fresh_veg")
+CASES = ("base", "conservative", "optimistic")
 
 
 class ConfigError(ValueError):
@@ -28,7 +28,6 @@ class Config:
 
     raw: Mapping[str, Any]
 
-    # ----------------------------------------------------------- case values
     @property
     def case(self) -> Mapping[str, Any]:
         return self.raw["case"]
@@ -42,11 +41,16 @@ class Config:
         return self.raw["calendar"]
 
     def price(self, item: str) -> float:
-        """Ernestine's selling price for ``item`` (USD per lb or each)."""
+        """Ernestine's selling price for ``item`` (USD per lb or each), Exhibit B."""
         return float(self.case["products"][item]["price_usd"])
 
-    def prices(self) -> dict[str, float]:
-        return {item: self.price(item) for item in REDEEMABLE}
+    def grain_prices(self) -> dict[str, float]:
+        return {item: self.price(item) for item in GRAINS}
+
+    @property
+    def fx(self) -> float:
+        """Belize dollars per US dollar (fixed at 2 by the case)."""
+        return float(self.case["fx_bzd_per_usd"])
 
     def year(self, year: str) -> Mapping[str, Any]:
         if year not in YEAR_TYPES:
@@ -64,40 +68,26 @@ class Config:
     def months_of_type(self, year: str, kind: str) -> list[str]:
         return [m for m in self.months_in_order() if self.month_type(year, m) == kind]
 
-    def issue_months(self, year: str) -> frozenset[str]:
-        """Work months: planting months plus the harvest months of this year type."""
-        return frozenset(self.calendar["planting_months"]) | frozenset(self.months_of_type(year, "harvest"))
+    def redeem_months(self, year: str = "normal") -> frozenset[str]:
+        months: set[str] = set()
+        for kind in self.token["redeem_month_types"]:
+            months.update(self.months_of_type(year, kind))
+        return frozenset(months)
 
-    def redeem_months(self, year: str) -> dict[str, frozenset[str]]:
-        """Resolve each item's window names (month types or calendar keys) to months."""
-        out: dict[str, frozenset[str]] = {}
-        for item, windows in self.token["redeem_windows"].items():
-            months: set[str] = set()
-            for window in windows:
-                if window in MONTH_TYPES:
-                    months.update(self.months_of_type(year, window))
-                elif window in self.calendar:
-                    months.update(self.calendar[window])
-                else:
-                    raise ConfigError(f"unknown redeem window {window!r} for {item}")
-            out[item] = frozenset(months)
-        return out
-
-    def rules(self, year: str, **overrides: Any) -> Rules:
-        """Ledger rules for a year type. ``overrides`` replace token settings."""
-        token = {**self.token, **overrides}
+    def rules(self, year: str = "normal") -> Rules:
+        """Ledger rules for a year type."""
+        t = self.token
         return Rules(
-            in_kind_corn_lb=float(token["in_kind_corn_lb"]),
-            prices_usd=self.prices(),
-            max_tokens_per_household=int(token["max_tokens_per_household"]),
-            expiry_months=int(token["expiry_months"]),
-            min_coverage=float(token["min_coverage"]),
-            issue_months=self.issue_months(year),
+            prices_usd=self.grain_prices(),
+            token_value_usd=float(t["face_value_usd"]),
+            reward_share=float(t["earn"]["on_time_cash_reward_share"]),
+            on_time_days=int(t["earn"]["on_time_days"]),
             redeem_months=self.redeem_months(year),
+            drum2_capacity_lb=float(self.case["drums"]["capacity_lb"]) * int(t["drums"]["sale"]),
         )
 
     def with_overrides(self, updates: Mapping[str, Any]) -> Config:
-        """Return a copy with dotted-path values replaced, e.g. ``{"token.in_kind_corn_lb": 9}``."""
+        """Return a copy with dotted-path values replaced, e.g. ``{"token.cap_share_of_sales": 0.05}``."""
         raw = copy.deepcopy(dict(self.raw))
         for path, value in updates.items():
             node = raw
@@ -117,16 +107,17 @@ def _close(a: float, b: float, tol: float) -> bool:
 
 
 def validate(raw: Mapping[str, Any]) -> Config:
-    """Check the config against the case's own arithmetic and return a :class:`Config`.
+    """Check the config against the case's own arithmetic and the token rules.
 
     Raises:
-        ConfigError: if a key is missing or a case total does not reconcile.
+        ConfigError: if a key is missing, a case total does not reconcile, or the
+            token block breaks a rule of the final model.
     """
     try:
         case = raw["case"]
         years = case["years"]
         calendar = raw["calendar"]
-        raw["token"]
+        token = raw["token"]
     except KeyError as exc:  # pragma: no cover - message path
         raise ConfigError(f"missing config section: {exc}") from exc
 
@@ -161,11 +152,41 @@ def validate(raw: Mapping[str, Any]) -> Config:
     credit = sum(t["months"] * t["sales_per_month"] * t["credit_share"] for t in normal.values())
     if not _close(credit, years["normal"]["credit_usd"], 0.6):
         raise ConfigError("normal-year credit does not reconcile with Exhibit A month types")
-    for item in REDEEMABLE:
-        if item not in case["products"]:
-            raise ConfigError(f"no price for redeemable item {item!r}")
     if calendar["start_month"] not in MONTHS:
         raise ConfigError("calendar.start_month must be a month name")
+
+    # ---- token block: the final model's invariants
+    if token["face_value_usd"] * case["fx_bzd_per_usd"] != token["face_value_bzd"]:
+        raise ConfigError("1 token must be BZ$2 = US$1")
+    if sorted(token["redeemable_items"]) != sorted(GRAINS):
+        raise ConfigError("tokens are spent on corn and beans only")
+    if sorted(token["earn"]["crop_repayment"]["items"]) != sorted(GRAINS):
+        raise ConfigError("crop repayments are in corn and beans only")
+    if set(token["earn"]) != {"crop_repayment", "on_time_cash_reward_share", "on_time_days", "pickup"}:
+        raise ConfigError("tokens are earned only by crop repayment, on-time cash reward and pickup fare")
+    for kind in token["redeem_month_types"]:
+        if kind not in MONTH_TYPES:
+            raise ConfigError(f"unknown month type {kind!r}")
+    for key in ("cost_share_of_face", "unpaid_share_with_libreta"):
+        if set(token[key]) != set(CASES):
+            raise ConfigError(f"token.{key} needs base, conservative and optimistic")
+        for v in token[key].values():
+            if not 0 <= v <= 1:
+                raise ConfigError(f"token.{key} values must be shares in [0, 1]")
+    if not 0 < token["cap_share_of_sales"] <= 1:
+        raise ConfigError("token.cap_share_of_sales must be in (0, 1]")
+    drums = token["drums"]
+    if drums["family"] + drums["sale"] != drums["total"] or drums["family"] < 1 or drums["sale"] < 1:
+        raise ConfigError("need one family drum and at least one sale drum")
+    capacity = case["drums"]["capacity_lb"] * drums["sale"]
+    for key in ("drum2_fill_lb", "crop_repayment_lb"):
+        if set(token[key]) - set(GRAINS):
+            raise ConfigError(f"token.{key} may hold corn and beans only")
+    if sum(token["drum2_fill_lb"].values()) > capacity:
+        raise ConfigError("drum 2 fill exceeds drum capacity (Exhibit E)")
+    for item, lb in token["crop_repayment_lb"].items():
+        if lb > token["drum2_fill_lb"].get(item, 0):
+            raise ConfigError("crop repayments go into drum 2, so they cannot exceed its fill")
     return Config(raw)
 
 
