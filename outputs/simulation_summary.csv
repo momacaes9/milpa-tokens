@@ -1,7 +1,0 @@
-year,scenario,sales_usd,credit_usd,unpaid_credit_usd,cash_collected_usd,drum_sales_usd,net_cash_income_usd,drum_cost_usd,net_cash_after_drums_year1_usd,bad_debt_recovered_hours,bad_debt_recovered_usd,token_hours,helper_hours_total,ernestine_hours_saved_total,ernestine_hours_saved_harvest,tokens_issued,tokens_redeemed,tokens_expired,tokens_outstanding_end,fresh_redeemed_usd,grain_redeemed_usd,min_coverage_ratio,family_food_lb_min,sale_drum_lb_min
-normal,today,1370,594.0,148.5,1221.5,0.0,761.5,0,761.5,0.0,0.0,0,0.0,0.0,0.0,0,0,0,0,0.0,0.0,nan,0,0.0
-normal,drums,1532.5,683.375,148.5,1361.65625,162.5,901.65625,200,701.65625,0.0,0.0,0,0.0,0.0,0.0,0,0,0,0,0.0,0.0,nan,250,0.0
-normal,tokens,1460.5,643.775,148.5,1299.55625,90.5,839.55625,200,639.55625,17.82,44.55,60,77.82,77.82,46.692,60,34,0,26,36.0,66.0,1.0,250,12.569713
-bad,today,900,491.0,196.4,703.6,0.0,243.6,0,243.6,0.0,0.0,0,0.0,0.0,0.0,0,0,0,0,0.0,0.0,nan,0,0.0
-bad,drums,981.25,542.325292,196.4,764.319883,81.25,304.319883,200,104.319883,0.0,0.0,0,0.0,0.0,0.0,0,0,0,0,0.0,0.0,nan,250,0.0
-bad,tokens,900.25,491.157924,196.4,703.78683,0.25,243.78683,200,43.78683,23.568,58.92,41,64.568,64.568,31.4272,41,30,0,11,18.0,72.0,1.0,250,17.598616

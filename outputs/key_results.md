@@ -1,16 +1,14 @@
 # Key results
 
-| Result | Value |
-|---|---|
-| Food one token buys vs one hour's cash wage at Tierra Viva | 10 lb vs 8.3 lb corn (+20%) |
-| Token vs produce truck's best plantain price | +2% |
-| Lock-in if the in-kind rate drops to 9 lb | +8% vs cash; -8% vs truck |
-| Lock-in if the wage peg rises to BZ$6 | +0% vs cash; -15% vs truck |
-| Helper hours a normal year (tokens + debt paid in hands) | 78 h, 47 h of them at harvest |
-| Never-repaid credit recovered as labor, normal year | 17.8 h = $45 of the $149 lost today |
-| Helper hours, bad-weather year | 65 h (23.6 h from old debt) |
-| Tokens issued / redeemed, normal year | 60 / 34 (rest outstanding, backed) |
-| Value redeemed in produce that would have spoiled | $36 |
-| Lowest coverage of tokens by sale drums | 1.00 normal / 1.00 bad / 1.00 normal-then-storm (rule: never below 1.00) |
-| Tokens expired over a normal year followed by a storm year | 4 |
-| In-kind rate needed to keep the same premium if the wage rises to BZ$6 | 12 lb corn per token |
+| Result (normal year, base case) | Value | Source |
+|---|---|---|
+| Tokens issued per year | 73 (13 on-time reward + 60 pickup) | deck |
+| Tokens as a share of sales | 5.4% of $1,370 (cap 10% = 137 tokens) | Exhibit A, deck |
+| Credit no longer lost | $594 x (25% - 10%) = $89 | Exhibit A, deck |
+| Record gain net of reward tokens | $79 | deck |
+| Pickup rides gain net of token cost | $135 ($240 - $60 cash - 60 x $1 x 75%) | case cash costs, deck |
+| Drum 2 pre-harvest sales | 70% x $176 turned away = $123 | Exhibit D, deck |
+| Total of the three gains | $337 (conservative $297, optimistic $360); drums cost $200 once | Exhibit E, deck |
+| Corn repaid in kind | 3.33 lb = 1 token | Exhibit B ($0.30/lb) |
+| Beans repaid in kind | 1.00 lb = 1 token | Exhibit B ($1.00/lb) |
+| Monthly replay (steady state) | 73 tokens issued; lowest drum-2 coverage 2.83 (rule: never below 1.00); drum 1 stays at 250 lb | ledger replay |

@@ -1,22 +1,42 @@
-"""The 'what one token buys' table."""
+"""Tokens per lb: how corn and beans convert to tokens, both ways."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from .config import Config
-from .ledger import FRESH_ITEMS
+from .ledger import GRAINS
+
+LABELS = {"corn": "Corn (dried)", "beans": "Beans (dried)"}
 
 
-def token_table(cfg: Config, year: str = "normal") -> str:
-    """Markdown table: what one token redeems for, and when."""
-    rules = cfg.rules(year)
+def token_rows(cfg: Config) -> list[dict[str, Any]]:
+    face = float(cfg.token["face_value_usd"])
+    rows = []
+    for item in GRAINS:
+        price = cfg.price(item)
+        rows.append({
+            "item": item,
+            "price_usd_per_lb": price,
+            "lb_per_token": face / price,
+            "tokens_per_lb": price / face,
+            "example_lb": 10,
+            "example_tokens": 10 * price / face,
+        })
+    return rows
+
+
+def token_table(cfg: Config) -> str:
+    """Markdown table: corn 3.33 lb = 1 token, beans 1 lb = 1 token."""
+    order = cfg.months_in_order()
+    months = ", ".join(sorted(cfg.redeem_months("normal"), key=order.index))
     lines = [
-        "| Item | One token redeems for | Retail value at Tierra Viva | Redeemable in |",
-        "|---|---|---|---|",
+        "| Item | Case price (Exhibit B) | 1 token = | Repaying 10 lb credits | Spent in |",
+        "|---|---:|---:|---:|---|",
     ]
-    for item, months in rules.redeem_months.items():
-        unit = cfg.case["products"][item]["unit"]
-        qty = rules.units_per_token(item)
-        when = ", ".join(m for m in cfg.months_in_order() if m in months)
-        kind = " (fresh, on hand that month)" if item in FRESH_ITEMS else ""
-        lines.append(f"| {item}{kind} | {qty:.1f} {unit} | ${rules.token_value_usd:.2f} | {when} |")
+    for r in token_rows(cfg):
+        lines.append(
+            f"| {LABELS[r['item']]} | ${r['price_usd_per_lb']:.2f}/lb | {r['lb_per_token']:.2f} lb "
+            f"| {r['example_tokens']:g} tokens | pre-harvest gap ({months}) |"
+        )
     return "\n".join(lines)

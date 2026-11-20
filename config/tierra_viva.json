@@ -3,7 +3,8 @@
     "name": "Tierra Viva Farm - Milpa Tokens",
     "case": "UNC International Consulting, 'Tierra Viva' case packet, Fall 2026 (Exhibits A-F)",
     "currency": "USD unless a key ends in _bzd",
-    "note": "Values under 'case' are copied exactly from the case packet. Values under 'token' and 'simulation' are design choices or labelled assumptions; see 'assumptions'."
+    "note": "Values under 'case' are copied exactly from the case packet. Values under 'token' come from the pitch deck or are labelled design choices/assumptions; see 'assumptions'.",
+    "deck": "Team pitch deck, final token model (corn and beans only, no labor)"
   },
   "case": {
     "fx_bzd_per_usd": 2.0,
@@ -136,14 +137,6 @@
       "turned_away_avg_purchase_usd": 1.5,
       "harvest_fresh_spoilage_share": 0.2
     },
-    "time_hours_per_week": {
-      "field_work": 26,
-      "deliveries": 10,
-      "household": 9,
-      "drying_storing": 4,
-      "market_days": 4,
-      "collecting_debts": 3
-    },
     "drums": {
       "cost_usd_each": 100,
       "capacity_lb": 250,
@@ -166,7 +159,7 @@
   },
   "calendar": {
     "start_month": "Feb",
-    "status": "ASSUMPTION. The case gives month-type counts, not dates. Planting months are sourced (IICA/SHI-B 2013: Toledo maize planted May/June, beans and 'matambre' maize in December). Wet season June-October is from case Exhibit F. Harvest and pre-harvest months are inferred and labelled assumptions.",
+    "status": "ASSUMPTION. The case gives month-type counts, not dates. Wet season June-October is from case Exhibit F; harvest (Nov-Jan) and the 13-week pre-harvest gap (Jul-Sep) are inferred and labelled assumptions.",
     "normal": {
       "Feb": "typical",
       "Mar": "typical",
@@ -194,89 +187,148 @@
       "Nov": "storm",
       "Dec": "storm",
       "Jan": "harvest"
-    },
-    "planting_months": [
-      "May",
-      "Jun",
-      "Dec"
-    ],
-    "seed_sale_months": [
-      "Apr",
-      "Nov"
-    ]
+    }
   },
   "token": {
-    "unit": "1 token = 1 hour of work for Tierra Viva at planting or harvest",
-    "wage_bzd_per_hour": 5.0,
-    "wage_source": "Belize national minimum wage, BZ$5.00/hour for all categories of workers, effective 1 Jan 2023 (SI 169 and 170 of 2022). See data/belize_reference_data.csv.",
-    "in_kind_corn_lb": 10,
-    "max_tokens_per_household": 10,
-    "expiry_months": 12,
-    "min_coverage": 1.0,
-    "issue_windows": "planting months plus harvest months of the year type",
-    "redeem_windows": {
-      "corn": [
-        "pre_harvest",
-        "storm"
-      ],
-      "beans": [
-        "pre_harvest",
-        "storm"
-      ],
-      "seed_corn": [
-        "seed_sale_months"
-      ],
-      "plantain": [
-        "harvest"
-      ],
-      "fresh_veg": [
-        "harvest"
-      ]
-    }
-  },
-  "simulation": {
-    "drums_total": 2,
-    "family_drums": 1,
-    "sale_drum_mix_by_weight": {"corn": 0.5, "beans": 0.5},
-    "sale_drum_fill_share": {"normal": 1.0, "bad": 0.5},
-    "help_hours_wanted_per_work_month": 16,
-    "participating_households": 15,
-    "labor_settlement_share": 0.30,
-    "redemption_rate": 0.90,
-    "fresh_redemption_share_at_harvest": 0.5,
-    "helper_productivity": 1.0,
-    "fresh_share_of_harvest_sales": 0.35,
+    "definition": "1 token = BZ$2 = US$1 of Ernestine's corn or beans. Paper, stamped, numbered, logged in the Libreta. A store voucher, not money.",
+    "face_value_usd": 1.0,
+    "face_value_bzd": 2.0,
+    "redeemable_items": [
+      "corn",
+      "beans"
+    ],
+    "redeem_month_types": [
+      "pre_harvest"
+    ],
+    "earn": {
+      "crop_repayment": {
+        "items": [
+          "corn",
+          "beans"
+        ],
+        "note": "Credit repaid in corn ($0.30/lb) or beans ($1.00/lb), Exhibit B. Each $1 of crop value = 1 token credited against the debt; the grain goes into drum 2. Credits reduce debt; they are not vouchers in circulation."
+      },
+      "on_time_cash_reward_share": 0.05,
+      "on_time_days": 30,
+      "pickup": {
+        "rides_per_year": 12,
+        "fare_usd": 10.0,
+        "token_share_of_fare": 0.5
+      }
+    },
+    "cap_share_of_sales": 0.1,
+    "cost_share_of_face": {
+      "base": 0.75,
+      "conservative": 0.9,
+      "optimistic": 0.6
+    },
+    "unpaid_share_with_libreta": {
+      "base": 0.1,
+      "conservative": 0.15,
+      "optimistic": 0.08
+    },
+    "on_time_share_of_repaid": 0.5,
+    "drum2_capture_of_turned_away": 0.7,
     "turned_away_per_week_used": 9,
-    "monte_carlo": {
-      "runs": 2000,
-      "seed": 2026,
-      "unpaid_share_concentration": 20,
-      "labor_settlement_share_range": [0.15, 0.45],
-      "redemption_rate_range": [0.75, 1.0],
-      "bad_year_fill_share_range": [0.3, 0.7]
-    }
-  },
-  "sensitivity": {
-    "wage_bzd_per_hour": [5.0, 6.0],
-    "in_kind_corn_lb": [10, 9],
-    "drums_total": [2, 3]
+    "drums": {
+      "total": 2,
+      "family": 1,
+      "sale": 1
+    },
+    "drum2_fill_lb": {
+      "corn": 50,
+      "beans": 200
+    },
+    "crop_repayment_lb": {
+      "corn": 50,
+      "beans": 100
+    },
+    "crop_repaying_farmers": 5
   },
   "assumptions": [
-    {"key": "calendar.normal / calendar.bad", "value": "see calendar", "status": "assumption", "why": "Case gives month-type counts only. Planting months sourced (IICA/SHI-B 2013); harvest months inferred; storm months placed in the June-October wet season (Exhibit F)."},
-    {"key": "case.years.bad monthly credit", "value": "normal-year shares scaled to $491", "status": "derived", "why": "Case gives the bad-year credit total only."},
-    {"key": "token.in_kind_corn_lb", "value": 10, "status": "design choice", "why": "Makes one token worth $3.00 at Ernestine's corn price, 20% above the BZ$5 (US$2.50) hourly minimum wage."},
-    {"key": "token.max_tokens_per_household", "value": 10, "status": "design choice", "why": "Caps what Ernestine owes any one household at 10 hours of work ($30 of food at the 10 lb rate), so one family cannot drain a sale drum."},
-    {"key": "token.expiry_months", "value": 12, "status": "design choice", "why": "One full crop cycle; time-bank evidence shows unspent credits pile up without a limit."},
-    {"key": "simulation.drums_total / family_drums", "value": "2 / 1", "status": "design choice", "why": "Case: drums cost $100 and hold ~250 lb; she has $350. Drum 1 is the family's food and never counted as reserve."},
-    {"key": "simulation.sale_drum_mix_by_weight", "value": "50% corn, 50% beans", "status": "assumption", "why": "Turned-away buyers ask for corn and beans (Exhibit D); no split is given."},
-    {"key": "simulation.sale_drum_fill_share", "value": "normal 100%, bad 50%", "status": "assumption", "why": "Case gives no harvest tonnage. Family drum is filled first; a bad harvest leaves less for the sale drum."},
-    {"key": "simulation.help_hours_wanted_per_work_month", "value": 16, "status": "assumption", "why": "About 4 hours a week of help in planting and harvest months, against 26 h/week of field work that peaks then (Exhibit C)."},
-    {"key": "simulation.participating_households", "value": 15, "status": "case-derived", "why": "Exhibit D: about 15 households owe her money at any time."},
-    {"key": "simulation.labor_settlement_share", "value": 0.30, "status": "assumption", "why": "Share of never-repaid credit that would be repaid in hours instead. Team estimate; Monte Carlo tests 15-45%."},
-    {"key": "simulation.redemption_rate", "value": 0.90, "status": "assumption", "why": "Share of tokens redeemed before expiry. Monte Carlo tests 75-100%."},
-    {"key": "simulation.fresh_redemption_share_at_harvest", "value": 0.5, "status": "assumption", "why": "Share of harvest-month tokens taken immediately in fresh produce that would otherwise spoil."},
-    {"key": "simulation.fresh_share_of_harvest_sales", "value": 0.35, "status": "assumption", "why": "Exhibit B: plantains 20% + peppers/tomatoes/herbs 15% of sales; assumed to hold in harvest months."},
-    {"key": "simulation.turned_away_per_week_used", "value": 9, "status": "case-derived", "why": "Midpoint of 8-10 buyers a week (Exhibit D)."},
-    {"key": "simulation.helper_productivity", "value": 1.0, "status": "assumption", "why": "One neighbor hour replaces one of Ernestine's field hours."}
+    {
+      "key": "calendar.normal",
+      "value": "see calendar",
+      "status": "assumption",
+      "why": "Case gives month-type counts only; harvest Nov-Jan and the pre-harvest gap Jul-Sep are inferred; storm month in the June-October wet season (Exhibit F)."
+    },
+    {
+      "key": "case.years.bad monthly credit",
+      "value": "normal-year shares scaled to $491",
+      "status": "derived",
+      "why": "Case gives the bad-year credit total only."
+    },
+    {
+      "key": "token.face_value_usd",
+      "value": 1.0,
+      "status": "pitch deck",
+      "why": "1 token = BZ$2 = US$1 at the case exchange rate (BZ$2 = US$1)."
+    },
+    {
+      "key": "token.unpaid_share_with_libreta",
+      "value": "10% base, 15% conservative, 8% optimistic",
+      "status": "pitch deck",
+      "why": "Case: 25% of credit is never repaid (Exhibit A). The written, read-back Libreta plus the on-time reward is assumed to cut that to 10%."
+    },
+    {
+      "key": "token.on_time_share_of_repaid",
+      "value": 0.5,
+      "status": "assumption (reproduces the deck)",
+      "why": "Half of repaid credit is repaid in cash within 30 days and earns the 5% reward: 594 x 90% x 50% x 5% = 13 tokens."
+    },
+    {
+      "key": "token.on_time_cash_reward_share",
+      "value": 0.05,
+      "status": "pitch deck",
+      "why": "5% reward in tokens for cash repaid within 30 days."
+    },
+    {
+      "key": "token.earn.pickup",
+      "value": "12 rides x $10, half in tokens",
+      "status": "pitch deck",
+      "why": "A neighbor's pickup at peak harvest replaces the $240 a year of pickup rides (case cash costs); half the $10 fare is paid in tokens = 60 tokens a year. A transport fare, not labor."
+    },
+    {
+      "key": "token.cost_share_of_face",
+      "value": "75% base, 90% conservative, 60% optimistic",
+      "status": "pitch deck",
+      "why": "What a redeemed $1 token costs Ernestine in produce she would otherwise sell."
+    },
+    {
+      "key": "token.cap_share_of_sales",
+      "value": 0.1,
+      "status": "pitch deck",
+      "why": "Tokens issued in a year are capped at 10% of sales ($137 in a normal year)."
+    },
+    {
+      "key": "token.drum2_capture_of_turned_away",
+      "value": 0.7,
+      "status": "pitch deck",
+      "why": "Drum 2 lets her serve 70% of the pre-harvest buyers she now turns away."
+    },
+    {
+      "key": "token.turned_away_per_week_used",
+      "value": 9,
+      "status": "case-derived",
+      "why": "Midpoint of 8-10 buyers a week for 13 weeks at $1.50 (Exhibit D): $176."
+    },
+    {
+      "key": "token.drums",
+      "value": "2 drums: drum 1 family, drum 2 sale",
+      "status": "case-derived",
+      "why": "Exhibit E: $100 each, ~250 lb each. Drum 1 is the family's food, never sold, never backs tokens."
+    },
+    {
+      "key": "token.drum2_fill_lb",
+      "value": "50 lb corn + 200 lb beans",
+      "status": "assumption",
+      "why": "Beans carry 3.3x the value of corn per lb, so a mostly-bean drum 2 ($215) can back every token and still serve $123 of pre-harvest sales within 250 lb."
+    },
+    {
+      "key": "token.crop_repayment_lb",
+      "value": "50 lb corn + 100 lb beans",
+      "status": "assumption",
+      "why": "Five seed-buying farmers (Exhibit D: 20 buy seed) each repay $23 of seed credit in 10 lb corn + 20 lb beans at harvest. The rest of drum 2 is her own surplus."
+    }
   ]
 }

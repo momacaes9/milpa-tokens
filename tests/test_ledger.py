@@ -1,4 +1,4 @@
-"""Every ledger rule has a test that tries to break it."""
+"""Every Libreta rule, tried and broken."""
 
 from __future__ import annotations
 
@@ -6,360 +6,213 @@ import unittest
 
 from milpa.config import load
 from milpa.ledger import (
-    CapExceeded,
-    CashOutNotAllowed,
-    FamilyFoodProtected,
-    InsufficientBacking,
-    InsufficientReserve,
-    InsufficientTokens,
-    Ledger,
-    LedgerError,
-    OutsideWindow,
-    Rules,
-    TransferNotAllowed,
+    CapExceeded, CashOutNotAllowed, DrumFull, FamilyFoodProtected, InsufficientBacking,
+    InsufficientReserve, InsufficientTokens, Ledger, LedgerError, NotCornOrBeans,
+    OutsideWindow, Overpayment, Rules, TransferNotAllowed,
 )
 
 CFG = load()
 
 
-def make_ledger(corn_lb: float = 250.0, **overrides) -> Ledger:
-    """A normal-year ledger starting in February with one corn drum."""
-    ledger = Ledger(CFG.rules("normal", **overrides), start_month="Feb")
-    if corn_lb:
-        ledger.add_to_reserve(0, "corn", corn_lb)
-    return ledger
-
-
-# Normal-year calendar, start Feb: 0 Feb, 3 May, 4 Jun, 5 Jul, 6 Aug, 9 Nov, 10 Dec, 11 Jan
-MAY, JUN, JUL, AUG, NOV, DEC = 3, 4, 5, 6, 9, 10
+def ledger(corn: float = 50, beans: float = 200, cap: float | None = 137) -> Ledger:
+    led = Ledger(CFG.rules("normal"), annual_cap_tokens=cap)
+    if corn:
+        led.add_to_drum2("Jan", "corn", corn)
+    if beans:
+        led.add_to_drum2("Jan", "beans", beans)
+    return led
 
 
 class TestRules(unittest.TestCase):
-    def test_token_value_is_in_kind_corn(self):
-        rules = CFG.rules("normal")
-        self.assertAlmostEqual(rules.token_value_usd, 10 * 0.30)
-        self.assertAlmostEqual(rules.units_per_token("corn"), 10)
-        self.assertAlmostEqual(rules.units_per_token("beans"), 3.0)
-        self.assertAlmostEqual(rules.units_per_token("plantain"), 12.0)
+    def test_from_config(self):
+        r = CFG.rules("normal")
+        self.assertEqual(r.token_value_usd, 1.0)
+        self.assertEqual(r.redeem_months, frozenset({"Jul", "Aug", "Sep"}))
+        self.assertEqual(r.drum2_capacity_lb, 250)
+        self.assertAlmostEqual(r.lb_per_token("corn"), 10 / 3)
+        self.assertEqual(r.lb_per_token("beans"), 1.0)
 
-    def test_nine_pound_rate(self):
-        rules = CFG.rules("normal", in_kind_corn_lb=9)
-        self.assertAlmostEqual(rules.token_value_usd, 2.70)
-        self.assertAlmostEqual(rules.units_per_token("beans"), 2.7)
+    def test_invalid_rules(self):
+        prices = {"corn": 0.3, "beans": 1.0}
+        with self.assertRaises(ValueError):
+            Rules({"corn": 0.3, "beans": 1.0, "plantain": 0.25})
+        with self.assertRaises(ValueError):
+            Rules({"corn": 0.0, "beans": 1.0})
+        with self.assertRaises(ValueError):
+            Rules(prices, token_value_usd=0)
+        with self.assertRaises(ValueError):
+            Rules(prices, reward_share=1.5)
+        with self.assertRaises(ValueError):
+            Rules(prices, on_time_days=0)
+        with self.assertRaises(ValueError):
+            Rules(prices, redeem_months=frozenset({"Julember"}))
+        with self.assertRaises(ValueError):
+            Rules(prices, drum2_capacity_lb=0)
 
-    def test_invalid_rules_rejected(self):
-        base = dict(
-            in_kind_corn_lb=10, prices_usd={"corn": 0.3}, max_tokens_per_household=10,
-            expiry_months=12, min_coverage=1.0, issue_months=frozenset({"May"}),
-            redeem_months={"corn": frozenset({"Jul"})},
-        )
-        for bad in (
-            {"in_kind_corn_lb": 0}, {"min_coverage": 0.9}, {"expiry_months": 0},
-            {"max_tokens_per_household": 0}, {"issue_months": frozenset({"Maio"})},
-            {"prices_usd": {"beans": 1.0}}, {"prices_usd": {"corn": -1}},
-            {"redeem_months": {"rice": frozenset({"Jul"})}},
-        ):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                Rules(**{**base, **bad})
-
-    def test_unknown_item(self):
-        with self.assertRaises(LedgerError):
-            CFG.rules("normal").units_per_token("rice")
+    def test_only_corn_and_beans(self):
+        with self.assertRaises(NotCornOrBeans):
+            CFG.rules().lb_per_token("plantain")
 
 
-class TestIssue(unittest.TestCase):
-    def test_issue_in_work_month(self):
-        ledger = make_ledger()
-        lot = ledger.issue(MAY, "Pop household", 4)
-        self.assertEqual((lot.first_serial, lot.count), (1, 4))
-        self.assertEqual(ledger.outstanding, 4)
-        self.assertEqual(ledger.next_serial, 5)
-
-    def test_issue_outside_window(self):
-        ledger = make_ledger()
-        with self.assertRaises(OutsideWindow):
-            ledger.issue(JUL, "Pop household", 1)  # July is pre-harvest
-
-    def test_whole_hours_only(self):
-        ledger = make_ledger()
-        for hours in (0, -1, 1.5, True):
-            with self.subTest(hours=hours), self.assertRaises(LedgerError):
-                ledger.issue(MAY, "Pop household", hours)
-
-    def test_household_cap(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "Pop household", 10)
-        with self.assertRaises(CapExceeded):
-            ledger.issue(JUN, "Pop household", 1)
-        ledger.issue(JUN, "Cal household", 1)  # another household is fine
-
-    def test_backing_limits_issue(self):
-        ledger = make_ledger(corn_lb=50)  # 50 lb = $15 = 5 tokens at 10 lb each
-        self.assertEqual(ledger.backable_tokens(), 5)
-        ledger.issue(MAY, "A", 5)
-        with self.assertRaises(InsufficientBacking):
-            ledger.issue(MAY, "B", 1)
-        self.assertAlmostEqual(ledger.coverage_ratio(), 1.0)
-
-    def test_no_reserve_no_tokens(self):
-        ledger = make_ledger(corn_lb=0)
-        self.assertEqual(ledger.coverage_ratio(), float("inf"))
-        with self.assertRaises(InsufficientBacking):
-            ledger.issue(MAY, "A", 1)
-
-    def test_min_coverage_buffer(self):
-        ledger = make_ledger(corn_lb=50, min_coverage=1.25)
-        self.assertEqual(ledger.backable_tokens(), 4)
-
-
-class TestFamilyFood(unittest.TestCase):
-    def test_family_food_does_not_back_tokens(self):
-        ledger = make_ledger(corn_lb=0)
-        ledger.set_family_food("corn", 250)
-        self.assertEqual(ledger.reserve_value_usd(), 0)
-        with self.assertRaises(InsufficientBacking):
-            ledger.issue(MAY, "A", 1)
-
-    def test_family_food_cannot_be_taken(self):
-        ledger = make_ledger()
+class TestDrums(unittest.TestCase):
+    def test_drum1_is_never_touched(self):
+        led = ledger()
+        led.set_family_food("corn_and_beans", 250)
         with self.assertRaises(FamilyFoodProtected):
-            ledger.take_from_family_food("corn", 10)
-
-    def test_negative_family_food(self):
+            led.take_from_family_drum("corn", 10)
+        self.assertEqual(led.drum2_value_usd(), 50 * 0.3 + 200)
         with self.assertRaises(LedgerError):
-            make_ledger().set_family_food("corn", -1)
+            led.set_family_food("corn", -1)
 
-
-class TestRedeem(unittest.TestCase):
-    def test_redeem_corn_pre_harvest(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 3)
-        qty = ledger.redeem(JUL, "A", 2, "corn")
-        self.assertAlmostEqual(qty, 20)
-        self.assertAlmostEqual(ledger.sale_reserve["corn"], 230)
-        self.assertEqual(ledger.outstanding, 1)
-        self.assertEqual(ledger.redeemed_total, 2)
-
-    def test_redeem_outside_window(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 3)
-        with self.assertRaises(OutsideWindow):
-            ledger.redeem(JUN, "A", 1, "corn")
-
-    def test_redeem_more_than_held(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        with self.assertRaises(InsufficientTokens):
-            ledger.redeem(JUL, "A", 3, "corn")
-        with self.assertRaises(InsufficientTokens):
-            ledger.redeem(JUL, "B", 1, "corn")  # tokens are named
-
-    def test_redeem_item_not_listed(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
+    def test_drum2_capacity(self):
+        led = ledger()
+        with self.assertRaises(DrumFull):
+            led.add_to_drum2("Nov", "beans", 1)
+        with self.assertRaises(NotCornOrBeans):
+            ledger(0, 0).add_to_drum2("Nov", "cacao", 1)
         with self.assertRaises(LedgerError):
-            ledger.redeem(JUL, "A", 1, "cacao")
+            ledger(0, 0).add_to_drum2("Nov", "corn", 0)
 
-    def test_redeem_bad_count(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        with self.assertRaises(LedgerError):
-            ledger.redeem(JUL, "A", 0, "corn")
-
-    def test_redeem_needs_item_in_drum(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        with self.assertRaises(InsufficientReserve):
-            ledger.redeem(JUL, "A", 1, "beans")  # only corn in the drum
-
-    def test_fresh_redeem_only_from_surplus_that_month(self):
-        ledger = make_ledger()
-        ledger.issue(NOV, "A", 3)
-        ledger.set_fresh_on_hand(NOV, "plantain", 24)
-        self.assertAlmostEqual(ledger.redeem(NOV, "A", 2, "plantain"), 24)
-        with self.assertRaises(InsufficientReserve):
-            ledger.redeem(NOV, "A", 1, "plantain")
-        with self.assertRaises(InsufficientReserve):
-            ledger.redeem(DEC, "A", 1, "plantain")  # last month's surplus is gone
-
-    def test_fresh_surplus_validation(self):
-        ledger = make_ledger()
-        with self.assertRaises(LedgerError):
-            ledger.set_fresh_on_hand(NOV, "corn", 5)
-        with self.assertRaises(LedgerError):
-            ledger.set_fresh_on_hand(NOV, "plantain", -1)
-
-    def test_grain_mix_pays_when_no_single_grain_is_enough(self):
-        ledger = make_ledger(corn_lb=6)        # $1.80 of corn
-        ledger.add_to_reserve(0, "beans", 1.5)  # $1.50 of beans -> $3.30 backs one token
-        ledger.issue(MAY, "A", 1)
-        with self.assertRaises(InsufficientReserve):
-            ledger.redeem(JUL, "A", 1, "corn")
-        with self.assertRaises(InsufficientReserve):
-            ledger.redeem(JUL, "A", 1, "beans")
-        handed = ledger.redeem_grain_mix(JUL, "A", 1)
-        value = sum(lb * CFG.price(i) for i, lb in handed.items())
-        self.assertAlmostEqual(value, 3.00)
-        self.assertEqual(ledger.outstanding, 0)
-
-    def test_grain_mix_rules(self):
-        ledger = make_ledger(corn_lb=20)
-        ledger.issue(MAY, "A", 1)
-        with self.assertRaises(OutsideWindow):
-            ledger.redeem_grain_mix(JUN, "A", 1)
-        with self.assertRaises(InsufficientTokens):
-            ledger.redeem_grain_mix(JUL, "A", 2)
-        with self.assertRaises(LedgerError):
-            ledger.redeem_grain_mix(JUL, "A", 0)
-        with self.assertRaises(LedgerError):
-            ledger.redeem_grain_mix(JUL, "A", 1, items=("plantain",))
-        ledger2 = make_ledger(corn_lb=20)
-        ledger2.issue(MAY, "A", 1)
-        ledger2.sell_from_reserve(JUL, "corn", 10)  # leaves exactly $3.00
-        ledger2.sale_reserve["corn"] = 5            # simulate spoilage: $1.50 left
-        with self.assertRaises(InsufficientReserve):
-            ledger2.redeem_grain_mix(JUL, "A", 1)
-
-    def test_oldest_tokens_used_first(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        ledger.issue(JUN, "A", 2)
-        ledger.redeem(JUL, "A", 3, "corn")
-        self.assertEqual([(lot.issued_month, lot.remaining) for lot in ledger.lots], [(JUN, 1)])
-
-
-class TestExpiry(unittest.TestCase):
-    def test_tokens_expire_after_twelve_months(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 4)
-        self.assertEqual(ledger.expire(MAY + 11), 0)
-        self.assertEqual(ledger.expire(MAY + 12), 4)
-        self.assertEqual(ledger.outstanding, 0)
-        self.assertEqual(ledger.expired_total, 4)
-
-    def test_expired_tokens_cannot_be_redeemed(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 4)
-        with self.assertRaises(InsufficientTokens):
-            ledger.redeem(MAY + 14, "A", 1, "corn")  # July next year, expired
-
-    def test_expired_lots_do_not_count_toward_cap(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 10)
-        ledger.add_to_reserve(MAY + 12, "corn", 100)
-        ledger.issue(MAY + 12, "A", 1)  # May next year: old lot has expired
-
-
-class TestClosedLoop(unittest.TestCase):
-    def test_no_transfers(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        with self.assertRaises(TransferNotAllowed):
-            ledger.transfer("A", "B", 1)
-
-    def test_no_cash_out(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        with self.assertRaises(CashOutNotAllowed):
-            ledger.cash_out("A", 1)
-
-    def test_no_interest(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 1)
-        self.assertAlmostEqual(ledger.redeem(AUG, "A", 1, "corn"), 10)
-
-
-class TestReserveAndCredit(unittest.TestCase):
-    def test_sell_keeps_tokens_covered(self):
-        ledger = make_ledger(corn_lb=100)  # $30
-        ledger.issue(MAY, "A", 5)          # $15 owed
-        self.assertAlmostEqual(ledger.free_reserve_value_usd(), 15)
+    def test_sale_keeps_tokens_backed(self):
+        led = ledger(corn=0, beans=10)
+        led.issue("Nov", "pickup_neighbor", 8)
+        self.assertEqual(led.sell_from_drum2("Jul", "beans", 2), 2.0)
         with self.assertRaises(InsufficientBacking):
-            ledger.sell_from_reserve(JUL, "corn", 60)
-        self.assertAlmostEqual(ledger.sell_from_reserve(JUL, "corn", 50), 15)
-
-    def test_sell_validation(self):
-        ledger = make_ledger(corn_lb=10)
-        with self.assertRaises(LedgerError):
-            ledger.sell_from_reserve(JUL, "corn", 0)
+            led.sell_from_drum2("Jul", "beans", 1)
         with self.assertRaises(InsufficientReserve):
-            ledger.sell_from_reserve(JUL, "corn", 11)
-
-    def test_reserve_validation(self):
-        ledger = make_ledger()
+            led.sell_from_drum2("Jul", "corn", 1)
         with self.assertRaises(LedgerError):
-            ledger.add_to_reserve(0, "plantain", 10)
-        with self.assertRaises(LedgerError):
-            ledger.add_to_reserve(0, "corn", 0)
-
-    def test_debt_paid_in_hands(self):
-        ledger = make_ledger()
-        ledger.record_credit(0, "A", 10.0)
-        usd = ledger.settle_debt_with_labor(MAY, "A", 2, wage_usd_per_hour=2.5)
-        self.assertAlmostEqual(usd, 5.0)
-        self.assertAlmostEqual(ledger.debts_usd["A"], 5.0)
-        self.assertEqual(ledger.outstanding, 0)  # labor for debt issues no tokens
-
-    def test_debt_labor_rules(self):
-        ledger = make_ledger()
-        ledger.record_credit(0, "A", 4.0)
-        with self.assertRaises(LedgerError):
-            ledger.settle_debt_with_labor(MAY, "A", 2, wage_usd_per_hour=2.5)  # overpays
-        with self.assertRaises(OutsideWindow):
-            ledger.settle_debt_with_labor(JUL, "A", 1, wage_usd_per_hour=2.5)
-        with self.assertRaises(LedgerError):
-            ledger.settle_debt_with_labor(MAY, "A", 0, wage_usd_per_hour=2.5)
-        with self.assertRaises(LedgerError):
-            ledger.record_credit(0, "A", 0)
+            led.sell_from_drum2("Jul", "beans", 0)
 
 
-class TestAtomicity(unittest.TestCase):
-    def test_failed_issue_changes_nothing(self):
-        ledger = make_ledger(corn_lb=50)
-        before = (ledger.outstanding, ledger.next_serial, len(ledger.events))
+class TestEarning(unittest.TestCase):
+    def test_crop_repayment_credits_tokens_and_fills_drum2(self):
+        led = ledger(0, 0)
+        led.record_credit("May", "farmer_01", 23.0)
+        self.assertAlmostEqual(led.repay_in_crops("Nov", "farmer_01", "corn", 10), 3.0)
+        self.assertAlmostEqual(led.repay_in_crops("Nov", "farmer_01", "beans", 20), 20.0)
+        self.assertAlmostEqual(led.debts_usd["farmer_01"], 0.0)
+        self.assertEqual(led.drum2_lb, {"corn": 10, "beans": 20})
+        self.assertEqual(led.outstanding, 0)  # credits settle debt; no vouchers out
+        self.assertAlmostEqual(led.crop_tokens_credited, 23.0)
+
+    def test_crop_repayment_rules(self):
+        led = ledger(0, 0)
+        led.record_credit("May", "farmer_01", 5.0)
+        with self.assertRaises(Overpayment):
+            led.repay_in_crops("Nov", "farmer_01", "beans", 6)
+        with self.assertRaises(NotCornOrBeans):
+            led.repay_in_crops("Nov", "farmer_01", "cassava", 1)
+        with self.assertRaises(LedgerError):
+            led.repay_in_crops("Nov", "farmer_01", "corn", 0)
+        full = ledger()
+        full.record_credit("May", "farmer_01", 5.0)
+        with self.assertRaises(DrumFull):
+            full.repay_in_crops("Nov", "farmer_01", "beans", 1)
+
+    def test_on_time_cash_reward(self):
+        led = ledger()
+        led.record_credit("Feb", "hh_01", 100)
+        self.assertEqual(led.repay_cash("Feb", "hh_01", 30, days_late=10), 1)  # $1.50 -> 1 token
+        self.assertAlmostEqual(led.reward_carry_usd["hh_01"], 0.5)
+        self.assertEqual(led.repay_cash("Mar", "hh_01", 10, days_late=30), 1)  # 0.5 + 0.5
+        self.assertEqual(led.repay_cash("Apr", "hh_01", 40, days_late=31), 0)  # late: no reward
+        self.assertEqual(led.held, {"hh_01": 2})
+        self.assertAlmostEqual(led.debts_usd["hh_01"], 20)
+
+    def test_cash_repayment_rules(self):
+        led = ledger()
+        led.record_credit("Feb", "hh_01", 10)
+        with self.assertRaises(Overpayment):
+            led.repay_cash("Feb", "hh_01", 11, 0)
+        with self.assertRaises(LedgerError):
+            led.repay_cash("Feb", "hh_01", 0, 0)
+        with self.assertRaises(LedgerError):
+            led.repay_cash("Feb", "hh_01", 1, -1)
+        with self.assertRaises(LedgerError):
+            led.record_credit("Feb", "hh_01", 0)
+
+    def test_reward_waits_when_drum2_is_empty(self):
+        led = ledger(0, 0)
+        led.record_credit("Feb", "hh_01", 100)
+        self.assertEqual(led.repay_cash("Feb", "hh_01", 40, 5), 0)
+        self.assertAlmostEqual(led.reward_carry_usd["hh_01"], 2.0)
+        self.assertEqual(led.events[-1].kind, "reward_pending")
+        led.add_to_drum2("Nov", "beans", 5)
+        self.assertEqual(led.repay_cash("Nov", "hh_01", 20, 5), 3)
+
+    def test_pickup_fare(self):
+        led = ledger()
+        self.assertEqual(led.pay_pickup_fare("Nov", "pickup_neighbor", 10, 0.5), (5.0, 5))
+        self.assertEqual(led.held["pickup_neighbor"], 5)
+        with self.assertRaises(LedgerError):
+            led.pay_pickup_fare("Nov", "pickup_neighbor", 9, 0.5)  # $4.50: not whole tokens
+        with self.assertRaises(LedgerError):
+            led.pay_pickup_fare("Nov", "pickup_neighbor", 0, 0.5)
+        self.assertEqual(led.pay_pickup_fare("Nov", "pickup_neighbor", 10, 0), (10.0, 0))
+
+
+class TestIssueAndSpend(unittest.TestCase):
+    def test_backing_never_exceeded(self):
+        led = ledger(corn=0, beans=10)
+        led.issue("Nov", "a", 10)
+        self.assertEqual(led.coverage_ratio(), 1.0)
+        self.assertEqual(led.backable_tokens(), 0)
         with self.assertRaises(InsufficientBacking):
-            ledger.issue(MAY, "A", 6)
-        self.assertEqual(before, (ledger.outstanding, ledger.next_serial, len(ledger.events)))
+            led.issue("Nov", "b", 1)
 
-    def test_failed_redeem_changes_nothing(self):
-        ledger = make_ledger()
-        ledger.issue(MAY, "A", 2)
-        reserve = dict(ledger.sale_reserve)
-        with self.assertRaises(InsufficientTokens):
-            ledger.redeem(JUL, "A", 3, "corn")
-        self.assertEqual(reserve, ledger.sale_reserve)
-        self.assertEqual(ledger.outstanding, 2)
-
-    def test_batch_rolls_back_everything(self):
-        ledger = make_ledger()
+    def test_cap(self):
+        led = ledger(cap=5)
+        led.issue("Nov", "a", 5)
         with self.assertRaises(CapExceeded):
-            with ledger.batch():
-                ledger.issue(MAY, "A", 6)
-                ledger.issue(MAY, "A", 6)  # over the cap: undo both
-        self.assertEqual(ledger.outstanding, 0)
-        self.assertEqual(ledger.next_serial, 1)
-        self.assertEqual([e.kind for e in ledger.events], ["reserve_in"])
+            led.issue("Nov", "a", 1)
+        led.start_year(5)
+        led.issue("Feb", "a", 1)
 
-    def test_batch_commits_when_all_succeed(self):
-        ledger = make_ledger()
-        with ledger.batch():
-            ledger.issue(MAY, "A", 3)
-            ledger.issue(MAY, "B", 3)
-        self.assertEqual(ledger.outstanding, 6)
+    def test_whole_tokens_numbered(self):
+        led = ledger()
+        self.assertEqual(led.issue("Nov", "a", 3), (1, 3))
+        self.assertEqual(led.issue("Nov", "b", 2), (4, 5))
+        for bad in (0, -1, 1.5, True):
+            with self.assertRaises(LedgerError):
+                led.issue("Nov", "a", bad)
 
+    def test_redeem_corn_and_beans_in_gap(self):
+        led = ledger()
+        led.issue("Nov", "a", 6)
+        self.assertAlmostEqual(led.redeem("Jul", "a", 3, "corn"), 10.0)
+        self.assertAlmostEqual(led.redeem("Aug", "a", 3, "beans"), 3.0)
+        self.assertEqual(led.outstanding, 0)
+        self.assertAlmostEqual(led.drum2_lb["corn"], 40)
+        self.assertIsNone(led.coverage_ratio())
 
-class TestCalendar(unittest.TestCase):
-    def test_month_names(self):
-        ledger = make_ledger()
-        self.assertEqual(ledger.month_name(0), "Feb")
-        self.assertEqual(ledger.month_name(11), "Jan")
-        self.assertEqual(ledger.month_name(12), "Feb")
-        with self.assertRaises(ValueError):
-            ledger.month_name(-1)
+    def test_redeem_rules(self):
+        led = ledger(corn=3, beans=200)
+        led.issue("Nov", "a", 5)
+        with self.assertRaises(OutsideWindow):
+            led.redeem("Nov", "a", 1, "beans")
+        with self.assertRaises(NotCornOrBeans):
+            led.redeem("Jul", "a", 1, "plantain")
+        with self.assertRaises(InsufficientTokens):
+            led.redeem("Jul", "b", 1, "beans")
+        with self.assertRaises(InsufficientReserve):
+            led.redeem("Jul", "a", 1, "corn")
 
-    def test_bad_start_month(self):
-        with self.assertRaises(ValueError):
-            Ledger(CFG.rules("normal"), start_month="Feb.")
+    def test_not_money(self):
+        led = ledger()
+        with self.assertRaises(TransferNotAllowed):
+            led.transfer("a", "b", 1)
+        with self.assertRaises(CashOutNotAllowed):
+            led.cash_out("a", 1)
+
+    def test_batch_rolls_back(self):
+        led = ledger(corn=0, beans=5)
+        with self.assertRaises(InsufficientBacking):
+            with led.batch():
+                led.issue("Nov", "a", 3)
+                led.issue("Nov", "b", 3)
+        self.assertEqual(led.outstanding, 0)
+        self.assertEqual(led.next_serial, 1)
 
 
 if __name__ == "__main__":

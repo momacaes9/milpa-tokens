@@ -1,158 +1,140 @@
 # Milpa Tokens
 
-A closed-loop, food-backed harvest credit for **Tierra Viva Farm**, a fictional
+A closed-loop, grain-backed store voucher for **Tierra Viva Farm**, a fictional
 5-acre farm in Toledo District, Belize, from the UNC International Consulting
-Fall 2026 case competition.
+Fall 2026 case competition. This repo reproduces the final token model in our
+pitch deck from the case numbers, and proves its rules hold.
 
 [![tests](https://github.com/momacaes9/milpa-tokens/actions/workflows/ci.yml/badge.svg)](https://github.com/momacaes9/milpa-tokens/actions/workflows/ci.yml)
 
 ## The idea
 
-Ernestine has no cash to pay for help at planting and harvest, loses $149 a year
-(normal year; $196 in a bad one) to credit that is never repaid, and turns away
-8-10 buyers a week for corn and beans before harvest. A **Milpa Token** is a paper
-slip for **one hour of work** at Tierra Viva. She pays neighbors' hours with
-tokens; months later, when the village is short of food, the neighbor brings the
-token back for **10 lb of corn** (or the same $3.00 value in beans, seed, or fresh
-produce that would otherwise spoil) from her **sale drums**. Old debts can be
-**paid in hands**: an hour of work cancels US$2.50 of an unpaid balance, the
-Belize minimum wage. The token buys 20% more food than the hour's cash wage,
-which is why a neighbor prefers it.
+Ernestine sells $1,370 a year, $594 of it on credit, and 25% of that credit
+($149) is never repaid (Exhibit A). Before harvest she turns away 8-10 buyers a
+week for corn and beans (Exhibit D). Tokens are about **corn and beans only**,
+with no labor: tokens are never earned for work or hours.
 
-> **Tokens are not money.** Only Ernestine issues them and only Ernestine redeems
-> them, for food only. They cannot be passed between neighbors, are never cashed
-> out, and earn no interest. **The family's food for six people is never part of
-> the token reserve.** Ernestine runs everything on paper (a notebook, numbered
-> paper tokens, WhatsApp voice notes); this code exists only to prove the rules
-> hold and to simulate outcomes from the case numbers.
+**1 token = BZ$2 = US$1 of Ernestine's corn or beans.** Paper, stamped, numbered
+and logged in the **Libreta**, her credit notebook. It is a store voucher, not
+money: only Ernestine issues and redeems it. Farmers who bought seed on credit
+repay in corn and beans at harvest, and that grain goes into **drum 2**. In the
+pre-harvest gap, drum 2 serves token holders and the buyers she turns away
+today. **Drum 1 is the family's food** and is never sold.
 
 ## Rules
 
-| # | Rule | Enforced in |
-|---|---|---|
-| 1 | 1 token = 1 hour of work, whole hours only | `Ledger.issue` |
-| 2 | Issued only in planting (May, Jun, Dec) and harvest months | `OutsideWindow` |
-| 3 | Issued only while sale drums cover every token out (coverage >= 1.0) | `InsufficientBacking` |
-| 4 | Family drum never counts as reserve and can never be drawn | `FamilyFoodProtected` |
-| 5 | Max 10 tokens held per household | `CapExceeded` |
-| 6 | Tokens expire 12 months after issue | `Ledger.expire` |
-| 7 | Redeemed only in windows: grain pre-harvest/storm months, seed before planting, fresh produce at harvest | `OutsideWindow` |
-| 8 | No transfers, no cash-out, no interest | `TransferNotAllowed`, `CashOutNotAllowed` |
-| 9 | Every change is atomic; a failed step changes nothing | `Ledger.batch` |
-| 10 | A grain token may be paid as a corn-and-beans mix of the same value | `Ledger.redeem_grain_mix` |
-
-Full design: [docs/DESIGN.md](docs/DESIGN.md).
-
-## What one token is worth
-
-Prices are Ernestine's own (case Exhibit B). The wage peg is the Belize national
-minimum wage, BZ$5.00/h = US$2.50, in force since 1 January 2023.
-
-| Item | One token redeems for | Retail value | One hour's cash wage buys |
+| # | Rule | Source | Enforced in |
 |---|---|---|---|
-| Corn (dried) | 10 lb | $3.00 | 8.3 lb |
-| Beans (dried) | 3 lb | $3.00 | 2.5 lb |
-| Seed corn | 3 lb | $3.00 | 2.5 lb |
-| Plantains (harvest surplus) | 12 | $3.00 | 10 |
-| Peppers / tomatoes / herbs (harvest surplus) | 2 lb | $3.00 | 1.7 lb |
+| 1 | 1 token = BZ$2 = US$1 of corn or beans; whole, stamped, numbered tokens | deck; case BZ$2 = US$1 | `Ledger.issue` |
+| 2 | Earn: repay credit in corn ($0.30/lb) or beans ($1.00/lb); each $1 of crop = 1 token credited against the debt; grain goes into drum 2 | Exhibit B, deck | `Ledger.repay_in_crops` |
+| 3 | Earn: 5% of credit repaid in cash within 30 days, in tokens | deck | `Ledger.repay_cash` |
+| 4 | Earn: half the neighbor's pickup fare at peak harvest (12 rides x $10), a transport fare (no labor) | deck | `Ledger.pay_pickup_fare` |
+| 5 | Spend: only at her market table, only on corn or beans from drum 2, only in the pre-harvest gap, at case prices | Exhibits B, D; deck | `OutsideWindow`, `NotCornOrBeans` |
+| 6 | Tokens outstanding (US$) never exceed the value of corn and beans in drum 2 | deck | `InsufficientBacking` |
+| 7 | Drum 1 (family food) is never sold and never backs a token | Exhibit E, deck | `FamilyFoodProtected` |
+| 8 | Drum 2 holds at most ~250 lb | Exhibit E | `DrumFull` |
+| 9 | Tokens issued in a year are capped at 10% of sales | deck | `CapExceeded` |
+| 10 | No transfers between neighbors, no cash-out, no interest | deck | `TransferNotAllowed`, `CashOutNotAllowed` |
+| 11 | Every change is atomic; a failed step changes nothing | - | `Ledger.batch` |
 
-Redemption months: [docs/TOKEN_TABLE.md](docs/TOKEN_TABLE.md).
+Full design: [docs/DESIGN.md](docs/DESIGN.md). Tokens per lb:
+[outputs/token_table.md](outputs/token_table.md) (corn 3.33 lb = 1 token,
+beans 1 lb = 1 token).
 
-## Lock-in: why hold a token instead of cash
+## Lock-in: a token is worth $1 at Tierra Viva and $0 anywhere else
 
-| Item | 1 token buys at Tierra Viva | 1 hour's cash wage (BZ$5.00 = US$2.50) buys at Tierra Viva | ...at the produce truck (10-15% cheaper) | ...at Punta Gorda market* | Token vs cash at Tierra Viva | Token vs truck (truck's best price) | Can cash buy it from her pre-harvest? |
-|---|---|---|---|---|---|---|---|
-| Corn (dried) | 10.0 lb | 8.3 lb | not sold | 11.1 lb (2022-08-13) | +20% | n/a | not today: 8-10 buyers a week turned away |
-| Beans (dried) | 3.0 lb | 2.5 lb | not sold | 2.5 lb (2022-08-13) | +20% | n/a | not today: 8-10 buyers a week turned away |
-| Seed corn | 3.0 lb | 2.5 lb | not sold | n/a | +20% | n/a | yes |
-| Plantains | 12.0 | 10.0 | 11.1-11.8 | 15.2 (2022-08-13) | +20% | +2% | yes |
-| Peppers / tomatoes / herbs | 2.0 lb | 1.7 lb | 1.9-2.0 | 1.4 lb (2022-08-13) | +20% | +2% | yes |
+<!-- lock-in -->
+| Where the token is used | Value of 1 token | Buys | Why |
+|---|---:|---|---|
+| Tierra Viva market table: corn | $1.00 | 3.33 lb corn from drum 2 | case price $0.30/lb (Exhibit B); pre-harvest gap, when 8-10 buyers a week are turned away (Exhibit D) |
+| Tierra Viva market table: beans | $1.00 | 1.00 lb beans from drum 2 | case price $1.00/lb (Exhibit B); same window |
+| Produce truck | $0.00 | nothing | truck sells plantain, tomato, onion, no corn or beans, and does not accept tokens (case, Competition) |
+| As cash | $0.00 | nothing | no cash-out: a store voucher, not money |
+| Passed to a neighbor | $0.00 | nothing | no transfers: each token is logged to one holder in the Libreta |
+<!-- /lock-in -->
 
-\* BAPIS retail prices, latest Punta Gorda report reachable (2022). Reaching the market costs a $5 round-trip bus fare (Exhibit D), two hours of wage, so it is not a practical option for one hour's pay.
+## Key numbers
 
-## Key results
-
-Generated by `milpa build-outputs` (this block is checked against
-`outputs/key_results.md` by the test suite):
+Generated by `milpa build-outputs`; the test suite checks this block against
+`outputs/key_results.md`.
 
 <!-- key-results -->
-| Result | Value |
-|---|---|
-| Food one token buys vs one hour's cash wage at Tierra Viva | 10 lb vs 8.3 lb corn (+20%) |
-| Token vs produce truck's best plantain price | +2% |
-| Lock-in if the in-kind rate drops to 9 lb | +8% vs cash; -8% vs truck |
-| Lock-in if the wage peg rises to BZ$6 | +0% vs cash; -15% vs truck |
-| Helper hours a normal year (tokens + debt paid in hands) | 78 h, 47 h of them at harvest |
-| Never-repaid credit recovered as labor, normal year | 17.8 h = $45 of the $149 lost today |
-| Helper hours, bad-weather year | 65 h (23.6 h from old debt) |
-| Tokens issued / redeemed, normal year | 60 / 34 (rest outstanding, backed) |
-| Value redeemed in produce that would have spoiled | $36 |
-| Lowest coverage of tokens by sale drums | 1.00 normal / 1.00 bad / 1.00 normal-then-storm (rule: never below 1.00) |
-| Tokens expired over a normal year followed by a storm year | 4 |
-| In-kind rate needed to keep the same premium if the wage rises to BZ$6 | 12 lb corn per token |
+| Result (normal year, base case) | Value | Source |
+|---|---|---|
+| Tokens issued per year | 73 (13 on-time reward + 60 pickup) | deck |
+| Tokens as a share of sales | 5.4% of $1,370 (cap 10% = 137 tokens) | Exhibit A, deck |
+| Credit no longer lost | $594 x (25% - 10%) = $89 | Exhibit A, deck |
+| Record gain net of reward tokens | $79 | deck |
+| Pickup rides gain net of token cost | $135 ($240 - $60 cash - 60 x $1 x 75%) | case cash costs, deck |
+| Drum 2 pre-harvest sales | 70% x $176 turned away = $123 | Exhibit D, deck |
+| Total of the three gains | $337 (conservative $297, optimistic $360); drums cost $200 once | Exhibit E, deck |
+| Corn repaid in kind | 3.33 lb = 1 token | Exhibit B ($0.30/lb) |
+| Beans repaid in kind | 1.00 lb = 1 token | Exhibit B ($1.00/lb) |
+| Monthly replay (steady state) | 73 tokens issued; lowest drum-2 coverage 2.83 (rule: never below 1.00); drum 1 stays at 250 lb | ledger replay |
 <!-- /key-results -->
 
-### Simulation, normal and bad-weather year
+How the numbers are built (base case; conservative / optimistic in
+[outputs/annual_model.md](outputs/annual_model.md)):
 
-| | Today (case) | Drums only | Drums + Milpa Tokens |
-|---|---:|---:|---:|
-| Cash collected, normal year | $1,222 | $1,362 | $1,300 |
-| Cash collected, bad year | $704 | $764 | $704 |
-| Helper hours, normal / bad year | 0 / 0 | 0 / 0 | 78 / 65 |
-| Lowest coverage of tokens by sale drums | - | - | 1.00 |
+* **Reward tokens:** $594 credit x 90% repaid x 50% within 30 days x 5% = 13.
+* **Token cost:** each redeemed token costs Ernestine 75% of face (90%
+  conservative, 60% optimistic). Record gain = $89 - 13 x $1 x 75% = $79.
+* **Unpaid credit with the Libreta:** 10% (15% conservative, 8% optimistic),
+  down from 25% today.
+* **Pickup:** today $240 a year of rides; with a neighbor's pickup, 12 rides x $10,
+  $60 in cash and 60 tokens.
+* **Drum 2:** 9 buyers a week x 13 weeks x $1.50 = $176 turned away; drum 2 serves 70%.
 
-Read this honestly: with **2 drums**, tokens trade about $62 of pre-harvest grain
-sales for 78 hours of help and $45 of old debt repaid in work. With **3 drums**
-the cash cost disappears (see `outputs/sensitivity.md`), but three drums cost
-$300 of her $350 savings. Never-repaid credit itself is unchanged: tokens convert
-part of it to labor rather than to cash.
+![Drum 2 backs every token](outputs/charts/drum2_backing.png)
+![Annual gains](outputs/charts/annual_gains.png)
 
-All outputs (Markdown, CSV, PNG) for the pitch deck are in [`outputs/`](outputs/):
-lock-in table, token table, season simulation (summary and monthly), a two-year
-normal-then-storm stress test, Monte Carlo (2,000 runs, seed 2026), sensitivity
-(BZ$5 vs BZ$6, 10 vs 9 lb, 2 vs 3 drums) and five charts.
-
-![Coverage over two years](outputs/charts/coverage_over_time.png)
-![Lock-in](outputs/charts/lock_in.png)
+All outputs (Markdown, CSV, PNG) are in [`outputs/`](outputs/): key results,
+annual model in three cases, lock-in table, tokens per lb, the monthly replay
+through the Libreta rules, and three charts.
 
 ## Sources
 
-Case numbers come from the case packet (Exhibits A-F) and are kept exactly:
-2026 normal-year sales $1,370, 43% on credit, 25% never repaid ($149); bad year
-$900, 55%, 40% ($196); corn $0.30/lb, beans $1.00/lb, seed $1.00/lb; drums $100
-each holding ~250 lb; $350 savings; BZ$2 = US$1.
-
-External figures (minimum wage, BZ$6 status, BAPIS and SIB prices, Toledo
-planting calendar, Sarafu RCT and 2025 survey, Banco Palmas, time banks) are in
-[`data/belize_reference_data.csv`](data/belize_reference_data.csv) with URL and
-date, summarised in [docs/RESEARCH.md](docs/RESEARCH.md).
+* **Case packet (Exhibits A-E), kept exactly:** normal-year sales $1,370, credit
+  $594, 25% never repaid ($149) (A); corn $0.30/lb, beans $1.00/lb (B); $240 a year
+  of pickup rides (case cash costs); 8-10 buyers a week turned away for 13 weeks
+  at about $1.50 (D); drums $100 each holding ~250 lb (E); BZ$2 = US$1.
+* **Pitch deck:** the token definition, the three ways to earn, the 5% reward,
+  75% / 90% / 60% token cost, 10% / 15% / 8% unpaid credit with the Libreta,
+  the 10% cap, 12 rides x $10 with half in tokens, and 70% of turned-away buyers
+  served from drum 2.
+* **Assumptions** (each labelled in `config/tierra_viva.json` under
+  `assumptions`): 50% of repaid credit comes back within 30 days (reproduces the
+  deck); drum 2 holds 50 lb corn + 200 lb beans; five farmers repay 50 lb corn
+  + 100 lb beans in kind; harvest Nov-Jan and the gap Jul-Sep.
+* Background research (Belize prices, community-currency evidence) is in
+  [docs/RESEARCH.md](docs/RESEARCH.md) and
+  [data/belize_reference_data.csv](data/belize_reference_data.csv).
 
 ## Limits
 
-* **Assumptions are labelled, not hidden.** Harvest-month placement, drum mix,
-  bad-year drum fill, help wanted (16 h per work month), the share of bad debt
-  repaid in hands (30%) and the redemption rate (90%) are assumptions; each one is
-  listed in `config/tierra_viva.json` under `assumptions`. The Monte Carlo varies
-  the repayment-related ones.
-* **No seasonal price swing.** No Toledo harvest vs. pre-harvest price series was
-  found, so the model uses the case's turned-away demand, not a price premium.
-* **Wage peg.** BZ$6 is announced, not enacted (as of 19 Nov 2026). At BZ$6 the
-  in-kind rate must rise to 12 lb of corn to keep the same lock-in.
-* **Punta Gorda.** At 2022 Punta Gorda retail prices, an hour's cash buys 11.1 lb
-  of corn, more than a token, but getting there costs a $5 bus fare.
-* **Not modelled:** seed redemptions (no seed stock figure in the case), labor
-  quality, social dynamics of who joins. The family drum (250 lb) shows the family
-  reserve is never touched; it is not a claim that 250 lb feeds six people for a year.
+* **Normal year only.** The deck's numbers are for a normal year. A bad year
+  ($900 sales, 40% unpaid) is not modelled because the deck gives no Libreta
+  effect for it.
+* **The Libreta effect is an estimate.** 25% to 10% unpaid is the deck's
+  assumption, not a measured result; the conservative case (15%) shows the
+  downside.
+* **Drum 2 is tight.** Tokens plus pre-harvest sales need about $196 of grain
+  in the gap; a 250-lb drum holds $215 only if it is mostly beans. If drum 2
+  holds less, the code refuses sales before it lets a token go unbacked.
+* **No seasonal price swing.** Tokens are spent at case prices; no Toledo
+  harvest vs. pre-harvest price series was found.
+* **The 15 owing households are one account in the replay** so reward cents add
+  up as the deck counts them; per-household rules are unit-tested.
 
 ## Run
 
 ```bash
 pip install -e .            # core: no dependencies, Python 3.10+
-milpa check                 # config reconciles with Exhibit A
-milpa lockin                # lock-in table (try --wage-bzd 6 --in-kind-lb 12)
-milpa simulate              # both years, three scenarios
-milpa simulate --monte-carlo 2000 --seed 2026
-milpa sensitivity
+milpa check                 # config reconciles with Exhibit A and the token rules
+milpa model                 # annual gains: base, conservative, optimistic
+milpa lockin                # $1 at Tierra Viva, $0 at the truck, $0 as cash
+milpa token-table           # tokens per lb of corn and beans
+milpa simulate              # monthly replay through the Libreta rules
 pip install -e '.[charts]'  # matplotlib, only for PNG charts
 milpa build-outputs         # regenerate everything in outputs/
 python -m unittest discover -s tests

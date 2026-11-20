@@ -1,9 +1,8 @@
-# What one Milpa Token redeems for
+# Tokens per lb of corn and beans
 
-| Item | One token redeems for | Retail value at Tierra Viva | Redeemable in |
-|---|---|---|---|
-| corn | 10.0 lb | $3.00 | Jul, Aug, Sep, Oct |
-| beans | 3.0 lb | $3.00 | Jul, Aug, Sep, Oct |
-| seed_corn | 3.0 lb | $3.00 | Apr, Nov |
-| plantain (fresh, on hand that month) | 12.0 each | $3.00 | Nov, Dec, Jan |
-| fresh_veg (fresh, on hand that month) | 2.0 lb | $3.00 | Nov, Dec, Jan |
+| Item | Case price (Exhibit B) | 1 token = | Repaying 10 lb credits | Spent in |
+|---|---:|---:|---:|---|
+| Corn (dried) | $0.30/lb | 3.33 lb | 3 tokens | pre-harvest gap (Jul, Aug, Sep) |
+| Beans (dried) | $1.00/lb | 1.00 lb | 10 tokens | pre-harvest gap (Jul, Aug, Sep) |
+
+Repaying credit in crops credits tokens against the debt; the grain goes into drum 2. Spending tokens takes the same weight back out of drum 2.

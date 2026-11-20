@@ -9,9 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from .config import Config
-from .lockin import LockInRow
-from .simulate import YearResult
+from .config import CASES
+from .simulate import YearReplay
 
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"
@@ -36,7 +35,7 @@ def _setup():
         "xtick.color": INK_2, "ytick.color": INK_2, "axes.grid": True, "grid.color": GRID,
         "grid.linewidth": 0.8, "axes.spines.top": False, "axes.spines.right": False,
         "font.size": 10, "axes.titlesize": 12, "axes.titleweight": "bold", "axes.titlelocation": "left",
-        "legend.frameon": False, "lines.linewidth": 2, "svg.hashsalt": "milpa", "axes.axisbelow": True,
+        "legend.frameon": False, "lines.linewidth": 2, "axes.axisbelow": True,
     })
     return plt
 
@@ -50,115 +49,81 @@ def _save(fig, path: Path) -> Path:
     return path
 
 
-def coverage_chart(seq: Mapping[str, list[YearResult]], path: Path) -> Path:
-    """Coverage over a normal year followed by a storm year (24 months, one notebook)."""
+def backing_chart(years: list[YearReplay], path: Path) -> Path:
+    """Drum-2 value vs tokens outstanding (US$), month by month."""
     plt = _setup()
-    fig, ax = plt.subplots(figsize=(10, 4))
-    rows = [m for r in seq["tokens"] for m in r.months]
+    rows = [m for r in years for m in r.months]
     xs = list(range(len(rows)))
-    ys = [float("nan") if r.coverage_ratio is None else r.coverage_ratio for r in rows]
-    ax.plot(xs, ys, color=BLUE, marker="o", markersize=5, label="Drums + Milpa Tokens")
-    ax.axhline(1.0, color=INK_2, linestyle="--", linewidth=1)
-    ax.text(0, 1.12, "rule floor: fully backed (1.0)", ha="left", color=INK_2, fontsize=9)
-    ax.text(0, 0.45, "no line = no tokens out yet", ha="left", color=INK_2, fontsize=8)
-    ax.axvspan(11.5, len(rows) - 0.5, color=ORANGE, alpha=0.08, linewidth=0)
-    ax.text(12, max(y for y in ys if y == y) * 0.95, "storm year", color=INK_2, fontsize=9)
-    ax.set_xticks(xs, [r.month for r in rows], fontsize=8)
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(xs, [m.drum2_value_usd for m in rows], color=BLUE, marker="o", markersize=4,
+            label=r"Corn + beans in drum 2 (US\$)")
+    ax.plot(xs, [float(m.tokens_outstanding) for m in rows], color=ORANGE, marker="o", markersize=4,
+            label=r"Tokens outstanding (US\$, 1 token = \$1)")
+    for i, m in enumerate(rows):
+        if m.month_type == "pre_harvest":
+            ax.axvspan(i - 0.5, i + 0.5, color=AQUA, alpha=0.10, linewidth=0)
+    ax.text(rows.index(next(m for m in rows if m.month_type == "pre_harvest")) - 0.4,
+            ax.get_ylim()[1] * 0.92, "pre-harvest gap", color=INK_2, fontsize=9)
+    ax.set_xticks(xs, [m.month for m in rows], fontsize=8)
     ax.set_ylim(bottom=0)
-    ax.set_ylabel("Sale-drum value / value of tokens out")
-    ax.set_title("Every token out stays backed by grain, through a normal year and a storm year")
+    ax.set_ylabel("US$")
+    ax.set_title("Tokens out never exceed the grain in drum 2 (two normal years)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=9)
     return _save(fig, path)
 
 
-def drums_chart(results: Mapping[tuple[str, str], YearResult], path: Path) -> Path:
+def gains_chart(cases: Mapping[str, Mapping[str, Any]], path: Path) -> Path:
+    """Annual gain by source, three cases."""
     plt = _setup()
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
-    for ax, year, title in zip(axes, ("normal", "bad"), ("Normal year", "Bad-weather year")):
-        fam = results[("tokens", year)].months
-        xs = list(range(len(fam)))
-        ax.plot(xs, [r.family_food_lb for r in fam], color=AQUA, label="Family drum (never used for tokens)")
-        ax.plot(xs, [r.sale_drum_lb for r in results[("drums", year)].months], color=BLUE, label="Sale drum: drums only")
-        ax.plot(xs, [r.sale_drum_lb for r in fam], color=ORANGE, label="Sale drum: drums + tokens")
-        ax.set_xticks(range(12), [r.month for r in fam], fontsize=8)
-        ax.set_title(title)
-    axes[0].set_ylabel("lb of dried corn and beans")
-    axes[0].legend(loc="lower left", fontsize=8)
-    fig.suptitle("Food in drums by month", x=0.01, y=1.03, ha="left", fontweight="bold")
-    return _save(fig, path)
-
-
-def tokens_chart(results: Mapping[tuple[str, str], YearResult], path: Path) -> Path:
-    plt = _setup()
+    parts = (("record_gain_net_usd", "Libreta: credit recovered, net of reward tokens", BLUE),
+             ("pickup_gain_net_usd", "Pickup rides, net of token cost", ORANGE),
+             ("drum2_sales_usd", "Drum 2 pre-harvest sales", AQUA))
     fig, ax = plt.subplots(figsize=(8, 4))
-    rows = results[("tokens", "normal")].months
+    xs = list(range(len(CASES)))
+    bottom = [0.0] * len(CASES)
+    for key, label, color in parts:
+        vals = [cases[c][key] for c in CASES]
+        ax.bar(xs, vals, bottom=bottom, color=color, width=0.55, label=label)
+        for x, v, b in zip(xs, vals, bottom):
+            ax.text(x, b + v / 2, f"${v:,.0f}", ha="center", va="center", fontsize=9, color="white")
+        bottom = [b + v for b, v in zip(bottom, vals)]
+    for x, total in zip(xs, bottom):
+        ax.text(x, total + 6, f"${total:,.0f}", ha="center", fontsize=10, color=INK, fontweight="bold")
+    ax.set_xticks(xs, [c.capitalize() for c in CASES])
+    ax.set_ylim(0, max(bottom) * 1.35)
+    ax.set_ylabel("US$ per normal year")
+    ax.grid(axis="x", visible=False)
+    ax.set_title("Annual gain from the token model")
+    ax.legend(loc="upper left", fontsize=8)
+    return _save(fig, path)
+
+
+def token_flow_chart(year: YearReplay, path: Path) -> Path:
+    """Tokens issued (by source) and spent, by month, in the steady-state year."""
+    plt = _setup()
+    rows = year.months
     xs = list(range(len(rows)))
     w = 0.38
-    ax.bar([x - w / 2 for x in xs], [r.tokens_issued for r in rows], width=w - 0.04, color=BLUE, label="Issued (hours worked)")
-    ax.bar([x + w / 2 for x in xs], [r.tokens_redeemed for r in rows], width=w - 0.04, color=ORANGE, label="Redeemed (food handed out)")
-    ax.plot(xs, [r.tokens_outstanding for r in rows], color=AQUA, marker="o", markersize=5, label="Outstanding at month end")
-    ax.set_xticks(range(12), [r.month for r in rows])
-    ax.set_ylabel("Tokens (1 token = 1 hour)")
-    ax.set_ylim(0, max(r.tokens_outstanding for r in rows) * 1.45)
-    ax.set_title("Normal year: tokens go out at planting and harvest, come back pre-harvest")
+    fig, ax = plt.subplots(figsize=(9, 4))
+    reward = [m.reward_tokens_issued for m in rows]
+    pickup = [m.pickup_tokens_issued for m in rows]
+    ax.bar([x - w / 2 for x in xs], reward, width=w - 0.04, color=BLUE, label="Issued: 5% on-time reward")
+    ax.bar([x - w / 2 for x in xs], pickup, bottom=reward, width=w - 0.04, color=ORANGE,
+           label="Issued: half pickup fare")
+    ax.bar([x + w / 2 for x in xs], [m.tokens_redeemed for m in rows], width=w - 0.04, color=AQUA,
+           label="Spent on corn and beans")
+    ax.set_xticks(xs, [m.month for m in rows])
+    ax.set_ylabel(r"Tokens (1 token = \$1)")
+    ax.set_title("Tokens go out at harvest and through the year, come back in the pre-harvest gap")
     ax.legend(loc="upper left", fontsize=9)
     return _save(fig, path)
 
 
-def lock_in_chart(rows: list[LockInRow], wage_bzd: float, path: Path) -> Path:
-    plt = _setup()
-    by = {r.item: r for r in rows}
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.6), gridspec_kw={"wspace": 0.12})
-    panels = (("corn", "Corn (lb)"), ("plantain", "Plantains (count)"))
-    for k, (ax, (item, title)) in enumerate(zip(axes, panels)):
-        r = by[item]
-        labels = ["Token at Tierra Viva", f"BZ${wage_bzd:.0f} cash at Tierra Viva", "Cash at produce truck"]
-        values = [r.token_qty, r.wage_qty_at_tierra_viva, r.wage_qty_at_truck_high or 0.0]
-        colors = [BLUE, ORANGE, AQUA]
-        ys = range(len(labels))[::-1]
-        ax.barh(list(ys), values, color=colors, height=0.6)
-        for y, v, lab in zip(ys, values, labels):
-            txt = "truck does not sell it" if (lab.startswith("Cash at produce") and v == 0) else f"{v:.1f}"
-            ax.text(max(v, 0) + 0.2, y, txt, va="center", color=INK, fontsize=9)
-        ax.set_yticks(list(ys), labels if k == 0 else [""] * len(labels))
-        ax.set_title(f"What 1 hour of work buys: {title}")
-        ax.grid(axis="y", visible=False)
-        ax.set_xlim(0, max(values) * 1.35)
-    return _save(fig, path)
-
-
-def cash_hours_chart(results: Mapping[tuple[str, str], YearResult], path: Path) -> Path:
-    plt = _setup()
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
-    scen = (("today", "Today", BLUE), ("drums", "Drums only", ORANGE), ("tokens", "Drums + tokens", AQUA))
-    w = 0.26
-    for j, (key, label, color) in enumerate(scen):
-        cash = [results[(key, y)].totals["cash_collected_usd"] for y in ("normal", "bad")]
-        hours = [results[(key, y)].totals["helper_hours_total"] for y in ("normal", "bad")]
-        xs = [i + (j - 1) * w for i in range(2)]
-        axes[0].bar(xs, cash, width=w - 0.03, color=color, label=label)
-        axes[1].bar(xs, hours, width=w - 0.03, color=color, label=label)
-        for x, v in zip(xs, cash):
-            axes[0].text(x, v + 15, f"${v:,.0f}", ha="center", fontsize=8, color=INK)
-        for x, v in zip(xs, hours):
-            axes[1].text(x, v + 1.5, f"{v:.0f} h", ha="center", fontsize=8, color=INK)
-    for ax in axes:
-        ax.set_xticks([0, 1], ["Normal year", "Bad-weather year"])
-        ax.grid(axis="x", visible=False)
-    axes[0].set_title("Cash collected (US$)")
-    axes[1].set_title("Helper hours at planting + harvest")
-    axes[0].legend(loc="upper right", fontsize=8)
-    return _save(fig, path)
-
-
-def render_all(cfg: Config, results: Mapping[tuple[str, str], YearResult], lock_rows: list[LockInRow],
-               sens: list[dict[str, Any]], out_dir: Path,
-               seq: Mapping[str, list[YearResult]]) -> list[Path]:
+def render_all(cases: Mapping[str, Mapping[str, Any]], years: list[YearReplay], out_dir: Path) -> list[Path]:
     """Render every chart into ``out_dir``."""
     out_dir = Path(out_dir)
     return [
-        coverage_chart(seq, out_dir / "coverage_over_time.png"),
-        drums_chart(results, out_dir / "food_in_drums.png"),
-        tokens_chart(results, out_dir / "tokens_flow.png"),
-        lock_in_chart(lock_rows, cfg.token["wage_bzd_per_hour"], out_dir / "lock_in.png"),
-        cash_hours_chart(results, out_dir / "cash_and_hours.png"),
+        backing_chart(years, out_dir / "drum2_backing.png"),
+        gains_chart(cases, out_dir / "annual_gains.png"),
+        token_flow_chart(years[-1], out_dir / "token_flow.png"),
     ]
